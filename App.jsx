@@ -36,7 +36,6 @@ class SynthEngine {
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AudioContext();
         this.master = this.ctx.createGain();
-        // 🌟 總音量保持在舒適的 0.1
         this.master.gain.value = 0.1; 
         this.master.connect(this.ctx.destination);
         this.nextNoteTime = this.ctx.currentTime + 0.1;
@@ -244,10 +243,12 @@ const UPGRADE_COSTS = [0, 100, 300, 600, 1000, 1500];
 const MAX_LEVEL = 5;
 
 // ==========================================
-// 🎨 AI 圖像生成服務
+// 🎨 AI 圖像生成服務 (金鑰與防卡死邏輯)
 // ==========================================
 const apiKey = ""; 
+
 const generateAndProcessImage = async (promptText) => {
+    if (!apiKey) throw new Error("No API Key configured");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
     const payload = { instances: [{ prompt: promptText }], parameters: { sampleCount: 1 } };
     const fetchWithBackoff = async (retries = 5, delays = [1000, 2000, 4000, 8000, 16000]) => {
@@ -355,12 +356,20 @@ const drawGeometricBoat = (ctx, x, y, width, height, levelInput) => {
         ctx.shadowBlur = 25; ctx.shadowColor = '#00e5ff'; ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
         ctx.beginPath(); ctx.moveTo(0, 30); ctx.lineTo(-40, 10); ctx.lineTo(-20, 60); ctx.lineTo(0, height-10); ctx.fill(); ctx.beginPath(); ctx.moveTo(width, 30); ctx.lineTo(width+40, 10); ctx.lineTo(width+20, 60); ctx.lineTo(width, height-10); ctx.fill(); 
         ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.moveTo(width/2, -30); ctx.lineTo(width+15, 30); ctx.lineTo(width+5, height+20); ctx.lineTo(width/2, height+40); ctx.lineTo(-5, height+20); ctx.lineTo(-15, 30); ctx.fill();
-        ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = '#096dd9'; ctx.fillRect(10, 20, width-20, height-10); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(width/2, height/2, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#faad14'; ctx.beginPath(); ctx.moveTo(width/2, -40); ctx.lineTo(width/2+25, -10); ctx.lineTo(width/2-25, -10); ctx.fill(); ctx.fillStyle = '#ff4d4f'; ctx.beginPath(); ctx.arc(width/2-10, -20, 4, 0, Math.PI * 2); ctx.arc(width/2+10, -20, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = '#096dd9'; ctx.fillRect(10, 20, width-20, height-10); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(width/2, height/2, 8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#faad14'; ctx.beginPath(); ctx.moveTo(width/2, -40); ctx.lineTo(width/2+25, -10); ctx.lineTo(width/2-25, -10); ctx.fill(); ctx.fillStyle = '#ff4d4f'; ctx.beginPath(); ctx.arc(width/2-10, -20, 4, 0, Math.PI*2); ctx.arc(width/2+10, -20, 4, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#f5222d'; ctx.beginPath(); ctx.moveTo(0, height); ctx.lineTo(-30, height-40); ctx.lineTo(-10, height-30); ctx.fill(); ctx.beginPath(); ctx.moveTo(width, height); ctx.lineTo(width+30, height-40); ctx.lineTo(width+10, height-30); ctx.fill();
     }
     ctx.restore();
 };
+
+const drawGeometricDragon = (ctx, w, h) => {
+    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(w/2, h/2, 50, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f5222d'; ctx.fillRect(w/2-25, h/2-10, 15, 5); ctx.fillRect(w/2+10, h/2-10, 15, 5);
+};
+
+const getTargetAsset = (assets, name) => (!assets || assets === "fallback") ? null : assets[name];
+const getBoatScale = (level) => ({ 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5 }[Math.min(level, 5)] || 1.0);
 
 const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
     const previewCanvasRef = useRef(null);
@@ -410,6 +419,7 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
             
             if (isLocked) {
                 ctx.shadowBlur = 40; ctx.shadowColor = '#00e5ff';
+                ctx.globalCompositeOperation = 'source-over';
                 const offCanvas = document.createElement('canvas'); offCanvas.width = canvas.width; offCanvas.height = canvas.height;
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
@@ -425,7 +435,11 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
             if (viewType === 'side') ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -50 * targetScale, -100 * targetScale, 100 * targetScale, 200 * targetScale, level);
         }
         ctx.restore();
-        if (isLocked) { ctx.fillStyle = "white"; ctx.font = "bold 80px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("?", canvas.width/2, canvas.height/2); }
+        
+        if (isLocked) {
+            ctx.fillStyle = "white"; ctx.font = "bold 80px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText("?", canvas.width/2, canvas.height/2);
+        }
     }, [level, assets, viewType, isLocked]);
     return <canvas ref={canvasRef} width={viewType === 'side' ? 360 : 220} height={viewType === 'side' ? 200 : 220} className="rounded-xl border-4 border-white shadow-2xl block max-w-full h-auto" />;
 };
@@ -535,8 +549,17 @@ export default function App() {
       const initAssets = async () => {
           const currentLvl = Math.min(parseInt(safeGetStorage('db_upgrades', { lives: 1 }, true)?.lives || 1, 10), 5);
           let loadedAssets = {};
+
+          // 🌟🌟🌟 核心防卡死邏輯：如果沒填 API Key，直接 0.5 秒跳過進入選單 🌟🌟🌟
+          if (!apiKey) {
+              setLoadingStatus("快速啟動：備用幾何模式...");
+              setLoadingProgress(100);
+              setTimeout(() => { setAssets({}); setCurrentView('menu'); }, 500);
+              return;
+          }
+
           try {
-              setLoadingStatus(`優先載入核心素材...`); setLoadingProgress(40);
+              setLoadingStatus(`優先載入核心龍舟與神龍中...`); setLoadingProgress(40);
               const coreTasks = [{ key: `boat${currentLvl}_top`, p: PROMPTS[`boat${currentLvl}_top`] }, { key: `boat${currentLvl}_side`, p: PROMPTS[`boat${currentLvl}_side`] }, { key: 'dragon', p: PROMPTS.dragon }];
               const results = await Promise.allSettled(coreTasks.map(t => generateAndProcessImage(t.p)));
               results.forEach((res, index) => { if (res.status === 'fulfilled') loadedAssets[coreTasks[index].key] = res.value; else retryQueueRef.current.push(coreTasks[index]); });
@@ -552,7 +575,7 @@ export default function App() {
                   }
               };
               loadExtraAssets();
-          } catch (e) { setLoadingStatus("啟用全備用模式..."); setLoadingProgress(100); setTimeout(() => { setAssets({}); setCurrentView('menu'); }, 1500); }
+          } catch (e) { setLoadingStatus("系統異常，啟用全備用模式..."); setLoadingProgress(100); setTimeout(() => { setAssets({}); setCurrentView('menu'); }, 1500); }
       };
       initAssets();
   }, []);
@@ -560,7 +583,7 @@ export default function App() {
   useEffect(() => {
       let isPolling = false; let timerId = null;
       const pollQueue = async () => {
-          if (!isPolling && retryQueueRef.current.length > 0) {
+          if (!isPolling && retryQueueRef.current.length > 0 && apiKey) {
               isPolling = true; const batch = retryQueueRef.current.splice(0, 2);
               for (const item of batch) { try { const img = await generateAndProcessImage(item.p); setAssets(prev => { if (!prev) return prev; return { ...prev, [item.key]: img }; }); } catch (e) { retryQueueRef.current.push(item); } await new Promise(r => setTimeout(r, 1500)); }
               isPolling = false;
@@ -611,6 +634,7 @@ export default function App() {
     ctx.fillStyle = isFeverTime ? '#ffe58f' : stageConfig.bank; ctx.fillRect(0, 0, 20, state.canvasHeight); ctx.fillRect(state.canvasWidth - 20, 0, 20, state.canvasHeight); ctx.strokeStyle = isFeverTime ? '#ffd666' : stageConfig.line; ctx.lineWidth = 2;
     for(let i=0; i<6; i++) { const speedOffset = (state.introTimer > 0 || isAnimationPaused) ? 0 : (state.frames * state.speed); const yPos = (speedOffset + i * 120) % state.canvasHeight; ctx.beginPath(); ctx.moveTo(30, yPos); ctx.lineTo(30, yPos + 40); ctx.moveTo(state.canvasWidth - 30, yPos + 60); ctx.lineTo(state.canvasWidth - 30, yPos + 100); ctx.stroke(); }
     const currentLvl = parseInt(upgrades?.lives, 10) || 1; const boatScale = getBoatScale(currentLvl);
+    
     if (state.introTimer > 0) {
         state.introTimer--; const progress = 1 - (state.introTimer / 180);
         if (progress < 0.6) {
@@ -624,20 +648,24 @@ export default function App() {
         }
         if (state.introTimer === 1) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
     }
+
     if (!isAnimationPaused) { state.player.x += state.player.dx; if (state.player.x < 25) state.player.x = 25; if (state.player.x + state.player.width > state.canvasWidth - 25) state.player.x = state.canvasWidth - 25 - state.player.width; }
     if (state.player.isInvincible && !isAnimationPaused) { state.player.invincibleTimer--; if (state.player.invincibleTimer <= 0) state.player.isInvincible = false; }
     if (!state.player.isInvincible || Math.floor(state.player.invincibleTimer / 5) % 2 === 0) {
         const boatImg = getTargetAsset(assets, `boat${currentLvl}_top`);
         if (boatImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(boatImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
     }
+    
     if (state.currentStage === 3 && !isFeverTime && !isAnimationPaused) {
         const gradient = ctx.createRadialGradient(state.player.x + 20, state.player.y + 40, 50, state.player.x + 20, state.player.y + 40, 250); gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(1, 'rgba(0,0,0,0.85)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
     }
+
     if (isFeverTime) {
         if (!isAnimationPaused) state.feverTimer--; const floatY = Math.sin(state.frames * 0.1) * 5; ctx.save(); ctx.translate(state.canvasWidth/2, 30 + floatY);
         if (assets?.dragon) { ctx.shadowBlur = 30; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -60, -60, 120, 120); } ctx.restore();
         if (state.feverTimer <= 0) { setIsFeverTime(false); audio.setMode('game'); state.speed = state.baseSpeed; setIsHidingWordUI(true); state.wordIntroTimer = 150; if (state.lastNotifiedStage !== state.currentStage) { state.stageBannerTimer = 120; state.lastNotifiedStage = state.currentStage; } }
     } 
+
     if (!isAnimationPaused && state.frames % (isFeverTime ? 4 : 70) === 0) {
         if (isFeverTime) { state.items.push({ x: state.canvasWidth/2 - 15, y: 80, width: 30, height: 30, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); } 
         else {
@@ -646,12 +674,14 @@ export default function App() {
             state.items.push({ x: xPos, y: -30, width: 30, height: 30, type, char, color, dx: 0, dy: 0 });
         }
     }
+
     if (!isAnimationPaused && !isFeverTime && state.frames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
         const rand = Math.random(); let type, dx = 0; if (state.currentStage === 1) { type = rand > 0.5 ? 'log' : 'rock'; } else if (state.currentStage === 2) { if (rand < 0.33) type = 'log'; else if (rand < 0.66) type = 'rock'; else if (rand < 0.85) { type = 'fish'; dx = Math.random() > 0.5 ? 3 : -3; } else type = 'whirlpool'; } else { if (rand < 0.3) type = 'rock'; else if (rand < 0.6) { type = 'fish'; dx = Math.random() > 0.5 ? 4 : -4; } else if (rand < 0.8) type = 'whirlpool'; else type = 'ghost_ship'; }
         const width = (type === 'log') ? 60 : (type === 'whirlpool' ? 50 : 45); const height = (type === 'log') ? 25 : (type === 'whirlpool' ? 50 : 45); const color = type === 'log' ? '#874d00' : (type === 'ghost_ship' ? '#00ffff' : '#595959');
         let xP = 30 + Math.random() * (state.canvasWidth - 110); if (type === 'fish') { xP = dx > 0 ? 25 : state.canvasWidth - 70; } else { let att = 0; while(att < 10) { if (!state.items.some(it => Math.abs(it.x - xP) < Math.max(55, width) && Math.abs(it.y - (-50)) < 80)) break; xP = 30 + Math.random() * (state.canvasWidth - 110); att++; } }
         state.obstacles.push({ x: xP, y: -50, width, height, type, color, dx, obsFrames: 0 });
     }
+
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i]; if (!isAnimationPaused) { item.x += item.dx || 0; item.y += item.dy || state.speed; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
         if (item.type === 'coin') { const coinImg = getTargetAsset(assets, 'coin'); if (coinImg) { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x - 5, item.y - 5, 40, 40); ctx.restore(); } else { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 14, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); } } else {
@@ -667,6 +697,7 @@ export default function App() {
         }
         if (item.y > state.canvasHeight) state.items.splice(i, 1);
     }
+
     for (let i = state.obstacles.length - 1; i >= 0; i--) {
         const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed; obs.x += obs.dx || 0; obs.obsFrames = (obs.obsFrames || 0) + 1; if (obs.type === 'ghost_ship') { obs.y += 1.5; obs.x += Math.sin(obs.obsFrames * 0.1) * 2; } else if (obs.type === 'fish') obs.y += 1.0; }
         const customAsset = getTargetAsset(assets, obs.type);
@@ -676,6 +707,7 @@ export default function App() {
         if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
         if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
     }
+
     for (let i = state.effects.length - 1; i >= 0; i--) {
         const eff = state.effects[i]; const progress = eff.frames / eff.maxFrames; const alpha = 1 - progress; ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
         if (eff.type === 'coin_burst') { ctx.fillStyle = '#fadb14'; for (let j = 0; j < 5; j++) { const angle = (Math.PI * 2 / 5) * j + (eff.frames * 0.1); const dist = eff.frames * 2.5; ctx.fillRect(eff.x + Math.cos(angle) * dist - 3, eff.y + Math.sin(angle) * dist - 3, 6, 6); } } else if (eff.type === 'leaf_burst') { ctx.fillStyle = '#389e0d'; for (let j = 0; j < 4; j++) { ctx.save(); const angle = (Math.PI * 2 / 4) * j; const dist = eff.frames * 1.5; ctx.translate(eff.x + Math.cos(angle) * dist, eff.y + Math.sin(angle) * dist + (eff.frames * 0.5)); ctx.rotate(eff.frames * 0.1); ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.fill(); ctx.restore(); } } else if (eff.type === 'letter_ascend') { const flyY = eff.y - (eff.frames * 4); ctx.globalAlpha = Math.max(0, alpha); drawDragonBall(ctx, eff.x, flyY, 15, eff.char, true, false); } else if (eff.type === 'letter_ascend_target') { const easeP = 1 - Math.pow(1 - progress, 3); const currentX = eff.startX + (eff.targetX - eff.startX) * easeP; const currentY = eff.startY + (eff.targetY - eff.startY) * easeP; const currentRadius = 15 - (easeP * 3); ctx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 5)); drawDragonBall(ctx, currentX, currentY, currentRadius, eff.char, true, false); }
@@ -683,6 +715,7 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
+    // 🌟 防重疊大陣法
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; const ballSpacing = 50; const startX = state.canvasWidth / 2 - (n * ballSpacing) / 2 + (ballSpacing / 2); const centerY = state.canvasHeight / 2 - 50;
@@ -696,6 +729,7 @@ export default function App() {
         ctx.restore();
     }
 
+    // 🌟 雙層大陣法 (內外對調)
     if (state.summonTimer > 0) {
         state.summonTimer--; const t = state.summonTimer; const maxT = 260; const isGreat = state.isGreatSummon; ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, (maxT - t) / 40)})`; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const cx = state.canvasWidth / 2, cy = state.player.y - 120;
@@ -703,6 +737,7 @@ export default function App() {
         if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
         const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
         const radiusInner = 120; const radiusOuter = 180; const angleSpan = 2 * Math.PI / 3; const angleStart = Math.PI/2 + angleSpan/2; 
+        
         if (!isGreat || currentWordObj.stages.length === 1) {
             const n = targetWord.length;
             for (let i = 0; i < n; i++) {
@@ -755,6 +790,7 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [currentView, isPlaying, gameOver]);
 
+  // 🌟 觸控滑動支援
   const handleTouchStart = (e) => { if (currentView !== 'game' || !isPlaying || gameOver || gameState.current.summonTimer > 0 || gameState.current.wordIntroTimer > 0) return; if (e.target.closest('button')) return; touchRef.current.lastX = e.touches[0].clientX; gameState.current.player.dx = 0; };
   const handleTouchMove = (e) => {
       if (currentView !== 'game' || !isPlaying || gameOver || touchRef.current.lastX === null) return;
