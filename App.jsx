@@ -424,6 +424,20 @@ export default function App() {
   const [isAudioMuted, setIsAudioMuted] = useState(true);
   const [galleryLevel, setGalleryLevel] = useState(null);
 
+  // 🌟 新增：玩家名稱與登入狀態
+  const [playerName, setPlayerName] = useState('');
+  const [inputName, setInputName] = useState(() => safeGetStorage('last_login_name', '', false));
+
+  // 🌟 將原本預設讀取 localStorage 的狀態改為初始 0，等待登入後再載入
+  const [coins, setCoins] = useState(0);
+  const [upgrades, setUpgrades] = useState({ lives: 1, fever: 1 });
+  const [maxSummons, setMaxSummons] = useState(0);
+  
+  const [isNewRecord, setIsNewRecord] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isHidingWordUI, setIsHidingWordUI] = useState(false); 
+
   useEffect(() => {
       const unlockAudio = () => {
           if (!audio.ctx) { audio.init(); audio.isMuted = false; audio.master.gain.value = 0.1; setIsAudioMuted(false); } 
@@ -434,53 +448,79 @@ export default function App() {
       return () => { window.removeEventListener('click', unlockAudio); window.removeEventListener('touchstart', unlockAudio); };
   }, []);
 
-  const [coins, setCoins] = useState(() => safeGetStorage('db_coins', 0, false));
-  const [upgrades, setUpgrades] = useState(() => safeGetStorage('db_upgrades', { lives: 1, fever: 1 }, true));
-  const [maxSummons, setMaxSummons] = useState(() => safeGetStorage('db_max_summons', 0, false));
-  const [isNewRecord, setIsNewRecord] = useState(false);
-  const [user, setUser] = useState(null);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [isHidingWordUI, setIsHidingWordUI] = useState(false); 
-
   useEffect(() => {
-      if (!auth) { setIsDataLoaded(true); return; }
       const initAuth = async () => {
           try {
               if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
               else await signInAnonymously(auth);
-          } catch (e) { setIsDataLoaded(true); }
+          } catch (e) { }
       };
-      initAuth();
-      const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); if (!u) setIsDataLoaded(true); });
-      return () => unsubscribe();
+      if (auth) initAuth();
+      if (auth) {
+          const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); });
+          return () => unsubscribe();
+      }
   }, []);
 
+  // 🌟 Firebase 資料同步：改用 playerName 作為資料庫文件 ID
   useEffect(() => {
-      if (!user || !db) return;
-      const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'gamedata', 'save');
+      if (!user || !db || !playerName) return;
+      const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'playerSaves', playerName);
       const unsubscribe = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
               const data = docSnap.data();
               if (data.coins !== undefined) setCoins(data.coins);
               if (data.upgrades !== undefined) setUpgrades(data.upgrades);
               if (data.maxSummons !== undefined) setMaxSummons(data.maxSummons);
+          } else {
+              // 若雲端沒有此名字的紀錄，初始化為 0
+              setCoins(0);
+              setUpgrades({ lives: 1, fever: 1 });
+              setMaxSummons(0);
           }
           setIsDataLoaded(true); 
-      }, (error) => { setIsDataLoaded(true); });
+      }, (error) => { console.warn(error); setIsDataLoaded(true); });
       return () => unsubscribe();
-  }, [user]);
+  }, [user, db, playerName]);
 
+  // 🌟 Firebase 資料儲存：有進度變化時儲存至該 playerName
   useEffect(() => {
-      if (!isDataLoaded) return; 
+      if (!isDataLoaded || !playerName) return; 
       const saveData = async () => {
           if (auth && db && user) {
-              try { const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'gamedata', 'save'); await setDoc(userRef, { coins, upgrades, maxSummons }, { merge: true }); } catch(e) {}
+              try { 
+                  const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'playerSaves', playerName); 
+                  await setDoc(userRef, { coins, upgrades, maxSummons }, { merge: true }); 
+              } catch(e) {}
           } else {
-              safeSetStorage('db_coins', coins, false); safeSetStorage('db_upgrades', upgrades, true); safeSetStorage('db_max_summons', maxSummons, false);
+              // 備用 localStorage 也加上名字作為 key 區分
+              safeSetStorage(`db_coins_${playerName}`, coins, false); 
+              safeSetStorage(`db_upgrades_${playerName}`, upgrades, true); 
+              safeSetStorage(`db_max_summons_${playerName}`, maxSummons, false);
           }
       };
       saveData();
-  }, [coins, upgrades, maxSummons, isDataLoaded, user]);
+  }, [coins, upgrades, maxSummons, isDataLoaded, user, db, playerName]);
+
+  // 🌟 登入處理邏輯
+  const handleLogin = (name) => {
+      // 確保沒有奇怪的斜線破壞 Firebase 路徑
+      const trimmed = name.trim().replace(/[\/\\]/g, '_');
+      if (!trimmed) return;
+      
+      setIsDataLoaded(false); // 切換帳號時先重置讀取狀態，避免覆蓋
+      setPlayerName(trimmed);
+      safeSetStorage('last_login_name', trimmed, false);
+      
+      // 如果 Firebase 沒連線成功，從 local 載入對應名字的紀錄
+      if (!db) {
+          setCoins(safeGetStorage(`db_coins_${trimmed}`, 0, false));
+          setUpgrades(safeGetStorage(`db_upgrades_${trimmed}`, { lives: 1, fever: 1 }, true));
+          setMaxSummons(safeGetStorage(`db_max_summons_${trimmed}`, 0, false));
+          setIsDataLoaded(true);
+      }
+      setCurrentView('menu');
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameOver, setGameOver] = useState(false);
@@ -510,7 +550,7 @@ export default function App() {
   const toggleSound = () => { const muted = audio.toggleMute(); setIsAudioMuted(muted); };
 
   useEffect(() => {
-      if (currentView === 'menu' || currentView === 'shop') audio.setMode('menu');
+      if (currentView === 'menu' || currentView === 'shop' || currentView === 'login') audio.setMode('menu');
       else if (currentView === 'game') audio.setMode((gameState.current.summonTimer > 0 || gameState.current.wordIntroTimer > 0) ? 'stopped' : (isFeverTime ? 'fever' : 'game'));
       else audio.setMode('stopped');
   }, [currentView, isFeverTime]);
@@ -557,7 +597,8 @@ export default function App() {
           setLoadingProgress(100);
           
           setTimeout(() => {
-              setCurrentView('menu'); 
+              // 🌟 載入完成後先進入登入畫面
+              setCurrentView('login'); 
           }, 400);
       };
       
@@ -694,6 +735,7 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
+    // 🌟 新單字展示防重疊優化
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
@@ -833,7 +875,65 @@ export default function App() {
 
   if (currentView === 'loading') { return ( <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-gray-900 text-white p-6 text-center"> <div className="text-8xl mb-6 animate-bounce">✨</div> <h1 className="text-3xl font-black mb-4 text-blue-300">極速載入中...</h1> <p className="text-gray-400 mb-8 max-w-md">正在為您準備高畫質遊戲素材，請稍候！</p> <div className="w-full max-w-sm h-4 bg-gray-800 rounded-full overflow-hidden mb-2"><div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div></div> <p className="text-purple-300 font-bold">{loadingStatus}</p> </div> ); }
 
-  if (currentView === 'menu') { return ( <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative"> <SoundToggleButton /> <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center flex flex-col items-center"> <div className="text-6xl mb-4">🐉🛶</div> <h1 className="text-4xl font-black text-blue-900 mb-2">端午龍舟長征</h1> <p className="text-gray-500 mb-6">閃避險阻、收集單字、解鎖跨時代的神龍傳說！</p> <div className="flex gap-3 mb-8 w-full justify-center"> <div className="bg-yellow-100 px-4 py-2 rounded-full font-bold text-yellow-700 text-sm shadow-sm">💰 資金: {coins}</div> <div className="bg-blue-100 px-4 py-2 rounded-full font-bold text-blue-700 text-sm shadow-sm">🐉 最多召喚: {maxSummons} 次</div> </div> <div className="flex flex-col gap-4 w-full"> <button onClick={startGame} className="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">▶ 開始長征</button> <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">🛠️ 龍舟改造廠</button> </div> </div> </div> ); }
+  // 🌟 新增：登入畫面 (載入資源後會先導到這裡)
+  if (currentView === 'login') {
+      return (
+          <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative">
+              <SoundToggleButton />
+              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center flex flex-col items-center">
+                  <div className="text-6xl mb-4">🐉</div>
+                  <h1 className="text-3xl font-black text-blue-900 mb-2">龍舟通行證</h1>
+                  <p className="text-gray-500 mb-6 text-sm">請輸入您的名號，我們將自動保存與同步您的長征紀錄！跨裝置也能無縫接軌！</p>
+                  
+                  <input 
+                      type="text" 
+                      value={inputName} 
+                      onChange={e => setInputName(e.target.value)}
+                      placeholder="輸入名號 (例如: 阿龍)"
+                      className="w-full border-2 border-blue-200 rounded-xl p-4 mb-6 text-center text-xl font-bold text-gray-700 focus:outline-none focus:border-blue-500 shadow-inner"
+                      maxLength={15}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleLogin(inputName); }}
+                  />
+                  
+                  <button 
+                      onClick={() => handleLogin(inputName)}
+                      disabled={!inputName.trim()}
+                      className={`w-full py-4 text-white text-xl font-bold rounded-xl shadow-md transition-colors ${inputName.trim() ? 'bg-blue-500 hover:bg-blue-600 transform transition-transform hover:scale-105' : 'bg-gray-300 cursor-not-allowed'}`}
+                  >
+                      確認登入
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
+  if (currentView === 'menu') { 
+      return ( 
+          <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative"> 
+              <SoundToggleButton /> 
+              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center flex flex-col items-center"> 
+                  <div className="text-6xl mb-4">🐉🛶</div> 
+                  <h1 className="text-4xl font-black text-blue-900 mb-1">端午龍舟長征</h1> 
+                  
+                  {/* 🌟 顯示當前玩家與切換帳號按鈕 */}
+                  <div className="flex flex-col items-center mb-5">
+                      <p className="text-gray-500 font-bold text-sm">歡迎船長：<span className="text-blue-600">{playerName}</span></p>
+                      <button onClick={() => setCurrentView('login')} className="text-xs text-gray-400 hover:text-gray-600 underline mt-1">切換名號</button>
+                  </div>
+
+                  <p className="text-gray-500 mb-6 text-sm">閃避險阻、收集單字、解鎖跨時代的神龍傳說！</p> 
+                  <div className="flex gap-3 mb-8 w-full justify-center"> 
+                      <div className="bg-yellow-100 px-4 py-2 rounded-full font-bold text-yellow-700 text-sm shadow-sm">💰 資金: {coins}</div> 
+                      <div className="bg-blue-100 px-4 py-2 rounded-full font-bold text-blue-700 text-sm shadow-sm">🐉 最多召喚: {maxSummons} 次</div> 
+                  </div> 
+                  <div className="flex flex-col gap-4 w-full"> 
+                      <button onClick={startGame} className="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">▶ 開始長征</button> 
+                      <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">🛠️ 龍舟改造廠</button> 
+                  </div> 
+              </div> 
+          </div> 
+      ); 
+  }
 
   if (currentView === 'shop') { return ( <div className="flex flex-col items-center h-screen overflow-y-auto bg-blue-50 p-4 pt-10 relative"> <SoundToggleButton /> <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-[400px]"> <div className="flex justify-between items-center mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-gray-800">🛠️ 龍舟改造廠</h2><div className="bg-yellow-100 px-4 py-1 rounded-full font-bold text-yellow-700">💰 {coins}</div></div> <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-200"> <div className="flex justify-between items-start mb-2"> <div className="pr-2"><h3 className="font-bold text-lg text-red-600">❤️ 強化船體</h3><p className="text-sm text-gray-500">目前: {2 + currentLivesLvl} 命</p></div> <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">Lv. {currentLivesLvl}/{MAX_LEVEL}</span> </div> <div className="flex flex-col items-center gap-2 my-4 py-4 bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden"> <BoatPreview level={currentLivesLvl} isNext={false} assets={assets} onClick={setGalleryLevel} isLocked={false} /> {currentLivesLvl < MAX_LEVEL && (<React.Fragment><div className="text-2xl text-gray-300 animate-pulse my-1">▼</div><BoatPreview level={currentLivesLvl + 1} isNext={true} assets={assets} onClick={setGalleryLevel} isLocked={true} /></React.Fragment>)} </div> <button onClick={() => buyUpgrade('lives')} disabled={currentLivesLvl >= MAX_LEVEL || coins < UPGRADE_COSTS[currentLivesLvl]} className={`w-full py-2 mt-2 rounded-lg font-bold transition-colors ${currentLivesLvl >= MAX_LEVEL ? 'bg-gray-300 text-gray-500' : coins < UPGRADE_COSTS[currentLivesLvl] ? 'bg-gray-200 text-gray-400' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-sm'}`}>{currentLivesLvl >= MAX_LEVEL ? 'MAX' : `升級花費: 💰 ${UPGRADE_COSTS[currentLivesLvl]}`}</button> </div> <div className="bg-gray-50 p-4 rounded-xl mb-6 border border-gray-200"> <div className="flex justify-between items-start mb-2"> <div className="pr-2"><h3 className="font-bold text-lg text-orange-500">🔥 神龍降臨延長</h3><p className="text-sm text-gray-500">延長神龍噴吐金幣與無敵的時間。</p></div> <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">Lv. {currentFeverLvl}/{MAX_LEVEL}</span> </div> <button onClick={() => buyUpgrade('fever')} disabled={currentFeverLvl >= MAX_LEVEL || coins < UPGRADE_COSTS[currentFeverLvl]} className={`w-full py-2 mt-2 rounded-lg font-bold transition-colors ${currentFeverLvl >= MAX_LEVEL ? 'bg-gray-300 text-gray-500' : coins < UPGRADE_COSTS[currentFeverLvl] ? 'bg-gray-200 text-gray-400' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-sm'}`}>{currentFeverLvl >= MAX_LEVEL ? 'MAX' : `升級花費: 💰 ${UPGRADE_COSTS[currentFeverLvl]}`}</button> </div> <button onClick={() => setCurrentView('menu')} className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-xl shadow-md">返回首頁</button> </div> {galleryLevel !== null && ( <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto animate-fadeIn"> <button onClick={() => setGalleryLevel(null)} className="fixed top-6 right-6 text-white text-5xl font-light hover:text-red-400 transition-colors z-50 leading-none">&times;</button> <div className="min-h-screen flex flex-col items-center justify-center p-6 py-16 w-full"> <h2 className="text-4xl font-black text-white mb-2 text-center">{galleryLevel > currentLivesLvl ? '??? 神祕龍舟' : `Lv.${galleryLevel} 龍舟圖鑑`}</h2> <div className="text-blue-400 mb-8 font-bold text-lg text-center">{galleryLevel > currentLivesLvl ? '🔒 尚未解鎖 (剪影預覽)' : '✨ 已解鎖'}</div> <div className="flex flex-col gap-6 items-center w-full max-w-[400px]"> <LargeBoatPreview level={galleryLevel} assets={assets} viewType="side" isLocked={galleryLevel > currentLivesLvl} /> <LargeBoatPreview level={galleryLevel} assets={assets} viewType="top" isLocked={galleryLevel > currentLivesLvl} /> </div> <div className="flex justify-between w-full max-w-[320px] mt-10"> <button onClick={() => setGalleryLevel(Math.max(1, galleryLevel - 1))} disabled={galleryLevel <= 1} className="px-6 py-3 rounded-full font-bold text-lg bg-blue-600 text-white">◀ 上一階</button> <button onClick={() => setGalleryLevel(Math.min(MAX_LEVEL, galleryLevel + 1))} disabled={galleryLevel >= MAX_LEVEL} className="px-6 py-3 rounded-full font-bold text-lg bg-blue-600 text-white">下一階 ▶</button> </div> </div> </div> )} </div> ); }
 
