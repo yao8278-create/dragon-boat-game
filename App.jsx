@@ -424,11 +424,9 @@ export default function App() {
   const [isAudioMuted, setIsAudioMuted] = useState(true);
   const [galleryLevel, setGalleryLevel] = useState(null);
 
-  // 🌟 新增：玩家名稱與登入狀態
   const [playerName, setPlayerName] = useState('');
   const [inputName, setInputName] = useState(() => safeGetStorage('last_login_name', '', false));
 
-  // 🌟 將原本預設讀取 localStorage 的狀態改為初始 0，等待登入後再載入
   const [coins, setCoins] = useState(0);
   const [upgrades, setUpgrades] = useState({ lives: 1, fever: 1 });
   const [maxSummons, setMaxSummons] = useState(0);
@@ -462,7 +460,6 @@ export default function App() {
       }
   }, []);
 
-  // 🌟 Firebase 資料同步：改用 playerName 作為資料庫文件 ID
   useEffect(() => {
       if (!user || !db || !playerName) return;
       const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'playerSaves', playerName);
@@ -473,7 +470,6 @@ export default function App() {
               if (data.upgrades !== undefined) setUpgrades(data.upgrades);
               if (data.maxSummons !== undefined) setMaxSummons(data.maxSummons);
           } else {
-              // 若雲端沒有此名字的紀錄，初始化為 0
               setCoins(0);
               setUpgrades({ lives: 1, fever: 1 });
               setMaxSummons(0);
@@ -483,7 +479,6 @@ export default function App() {
       return () => unsubscribe();
   }, [user, db, playerName]);
 
-  // 🌟 Firebase 資料儲存：有進度變化時儲存至該 playerName
   useEffect(() => {
       if (!isDataLoaded || !playerName) return; 
       const saveData = async () => {
@@ -493,7 +488,6 @@ export default function App() {
                   await setDoc(userRef, { coins, upgrades, maxSummons }, { merge: true }); 
               } catch(e) {}
           } else {
-              // 備用 localStorage 也加上名字作為 key 區分
               safeSetStorage(`db_coins_${playerName}`, coins, false); 
               safeSetStorage(`db_upgrades_${playerName}`, upgrades, true); 
               safeSetStorage(`db_max_summons_${playerName}`, maxSummons, false);
@@ -502,17 +496,14 @@ export default function App() {
       saveData();
   }, [coins, upgrades, maxSummons, isDataLoaded, user, db, playerName]);
 
-  // 🌟 登入處理邏輯
   const handleLogin = (name) => {
-      // 確保沒有奇怪的斜線破壞 Firebase 路徑
       const trimmed = name.trim().replace(/[\/\\]/g, '_');
       if (!trimmed) return;
       
-      setIsDataLoaded(false); // 切換帳號時先重置讀取狀態，避免覆蓋
+      setIsDataLoaded(false); 
       setPlayerName(trimmed);
       safeSetStorage('last_login_name', trimmed, false);
       
-      // 如果 Firebase 沒連線成功，從 local 載入對應名字的紀錄
       if (!db) {
           setCoins(safeGetStorage(`db_coins_${trimmed}`, 0, false));
           setUpgrades(safeGetStorage(`db_upgrades_${trimmed}`, { lives: 1, fever: 1 }, true));
@@ -597,7 +588,6 @@ export default function App() {
           setLoadingProgress(100);
           
           setTimeout(() => {
-              // 🌟 載入完成後先進入登入畫面
               setCurrentView('login'); 
           }, 400);
       };
@@ -682,7 +672,10 @@ export default function App() {
         else {
             let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
             let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
-            state.items.push({ x: xPos, y: -40, width: 40, height: 40, type, char, color, dx: 0, dy: 0 });
+            
+            // 🌟 將生成位置往上調，避免龍珠圖案在畫面頂端憑空出現
+            const startY = type === 'coin' ? -40 : -80; 
+            state.items.push({ x: xPos, y: startY, width: 40, height: 40, type, char, color, dx: 0, dy: 0 });
         }
     }
     if (!isAnimationPaused && !isFeverTime && state.frames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
@@ -693,6 +686,7 @@ export default function App() {
     }
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i]; if (!isAnimationPaused) { item.x += item.dx || 0; item.y += item.dy || state.speed; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
+        
         if (item.type === 'coin') { 
             const coinImg = getTargetAsset(assets, 'coin'); 
             if (coinImg) { 
@@ -701,20 +695,59 @@ export default function App() {
                 ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 20, item.y + 20, 18, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); 
             } 
         } else {
+            // 🌟 字母氣球與粽子渲染邏輯
+            const hoverY = Math.sin(state.frames * 0.15) * 4; 
+            const orbX = item.x + 20;
+            const orbY = item.y - 35 + hoverY; // 龍珠在粽子上方飄動
+
+            // 畫棉繩 (從龍珠底部連接到粽子頂部)
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(orbX, orbY);
+            ctx.lineTo(item.x + 20, item.y + 5);
+            ctx.strokeStyle = '#d48806'; // 繩子顏色
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 2]); // 虛線模擬扭繩的紋理
+            ctx.stroke();
+            ctx.restore();
+
+            // 畫底部的粽子 (作為實際碰撞區，在 item.y 的位置)
             const zongziImg = getTargetAsset(assets, 'zongzi'); 
             if (zongziImg) { 
-                ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.drawImage(zongziImg, item.x, item.y + 5, 40, 40); ctx.restore(); 
+                ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; 
+                ctx.drawImage(zongziImg, item.x, item.y, 40, 40); 
+                ctx.restore(); 
             } else { 
-                ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+20, item.y+5); ctx.lineTo(item.x+40, item.y+35); ctx.lineTo(item.x, item.y+35); ctx.fill(); 
+                ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+20, item.y); ctx.lineTo(item.x+40, item.y+30); ctx.lineTo(item.x, item.y+30); ctx.fill(); 
             }
-            const hoverY = Math.sin(state.frames * 0.15) * 4; 
-            drawDragonBall(ctx, item.x + 20, item.y + 10 + hoverY, 22, item.char, true, false); 
+            
+            // 畫頂部的龍珠氣球
+            drawDragonBall(ctx, orbX, orbY, 22, item.char, true, false); 
         }
+
+        // 🌟 碰撞判定 (因為 item.y 對應的是粽子的位置，所以只有撞到粽子才會觸發！)
         if (!isAnimationPaused && checkCollision(state.player, item)) {
             if (item.type === 'letter') { 
-                state.effects.push({ type: 'leaf_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 30 }); const isCorrect = item.char === nextNeededChar;
-                if (isCorrect) { const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: item.x + 20, startY: item.y, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); handleCollectedLetter(item.char, targetWord); } else { state.effects.push({ type: 'letter_ascend', char: item.char, x: item.x + 20, y: item.y, frames: 0, maxFrames: 45 }); }
-            } else if (item.type === 'coin') { state.effects.push({ type: 'coin_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 20 }); audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); }
+                const orbX = item.x + 20;
+                const orbY = item.y - 35 + Math.sin(state.frames * 0.15) * 4;
+                
+                // 粽子葉爆開特效
+                state.effects.push({ type: 'leaf_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 30 }); 
+                
+                const isCorrect = item.char === nextNeededChar;
+                if (isCorrect) { 
+                    const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; 
+                    // 龍珠氣球飛上去收集
+                    state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: orbX, startY: orbY, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); 
+                    handleCollectedLetter(item.char, targetWord); 
+                } else { 
+                    // 錯的龍珠氣球直接飄走
+                    state.effects.push({ type: 'letter_ascend', char: item.char, x: orbX, y: orbY, frames: 0, maxFrames: 45 }); 
+                }
+            } else if (item.type === 'coin') { 
+                state.effects.push({ type: 'coin_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 20 }); 
+                audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); 
+            }
             state.items.splice(i, 1); continue;
         }
         if (item.y > state.canvasHeight) state.items.splice(i, 1);
@@ -759,31 +792,38 @@ export default function App() {
         const ritualWord = isGreat ? currentWordObj.fullWord : targetWord; const ritualMeaning = isGreat ? currentWordObj.fullMeaning : targetMeaning;
         if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
         const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
-        const radiusInner = 120; const radiusOuter = 180; const angleSpan = 2 * Math.PI / 3; const angleStart = Math.PI/2 + angleSpan/2; 
+        
+        // 🌟 改為直線緊湊排列設定 (半徑 20，直徑 40)
+        const ballRadius = 20;
+        const ballDiameter = ballRadius * 2;
+        
         if (!isGreat || currentWordObj.stages.length === 1) {
             const n = targetWord.length;
+            const startX = cx - (n * ballDiameter) / 2 + (ballDiameter / 2);
             for (let i = 0; i < n; i++) {
                 const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30;
-                let angle = Math.PI / 2; if (n > 1) angle = angleStart - (i / (n - 1)) * angleSpan;
-                const tx = cx + Math.cos(angle) * radiusInner, ty = cy + Math.sin(angle) * radiusInner;
+                const tx = startX + i * ballDiameter; // 直線排列，間距為直徑 (緊密貼合)
+                const ty = cy + 120; // 固定的水平高度
                 let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, 20, targetWord[i], true, false, ritualGlow);
+                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
             }
         } else {
             let prevWord = ""; for (let s = 0; s < currentStageIdx; s++) prevWord += currentWordObj.stages[s].word;
             const n1 = prevWord.length;
+            const startX1 = cx - (n1 * ballDiameter) / 2 + (ballDiameter / 2);
             for(let i = 0; i < n1; i++) {
-                let angle = Math.PI / 2; if (n1 > 1) angle = angleStart - (i / (n1 - 1)) * angleSpan;
-                const tx = cx + Math.cos(angle) * radiusInner, ty = cy + Math.sin(angle) * radiusInner;
-                ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, 20, prevWord[i], true, false, ritualGlow); ctx.globalAlpha = 1;
+                const tx = startX1 + i * ballDiameter;
+                const ty = cy + 90; // 上排高度
+                ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, ballRadius, prevWord[i], true, false, ritualGlow); ctx.globalAlpha = 1;
             }
             const n2 = targetWord.length;
+            const startX2 = cx - (n2 * ballDiameter) / 2 + (ballDiameter / 2);
             for(let i = 0; i < n2; i++) {
                 const uiX = state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, uiY = 30;
-                let angle = Math.PI / 2; if (n2 > 1) angle = angleStart - (i / (n2 - 1)) * angleSpan;
-                const tx = cx + Math.cos(angle) * radiusOuter, ty = cy + Math.sin(angle) * radiusOuter;
+                const tx = startX2 + i * ballDiameter;
+                const ty = cy + 140; // 下排高度
                 let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, 20, targetWord[i], true, false, ritualGlow);
+                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
             }
         }
         if (isGreat && t <= 200) {
@@ -793,9 +833,7 @@ export default function App() {
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
         
-        // 🌟 核心修改：神龍召喚動畫重製 (光柱爆發 -> 原地巨大化 -> 升空)
         if (t <= 140 && t > 0) {
-            // 光柱動畫：140 開始出現，隨後漸淡
             const beamP = Math.min(1, (140 - t) / 20);
             const beamAlpha = Math.min(1, t / 30); 
             ctx.save(); ctx.globalAlpha = beamAlpha;
@@ -812,23 +850,20 @@ export default function App() {
         if (t <= 130) {
             let dY, scale, alpha; 
             if (t > 70) { 
-                // 階段 1：從光柱與龍珠中浮現並巨大化 (130 -> 70)
-                const p = (130 - t) / 60; // 0 到 1
-                alpha = Math.min(1, p * 2); // 快速淡入
-                scale = 0.5 + p * 1.5; // 從 0.5 放大到 2.0
-                dY = cy + 20 - p * 80; // 從龍珠位置往上浮起一點點
+                const p = (130 - t) / 60; 
+                alpha = Math.min(1, p * 2); 
+                scale = 0.5 + p * 1.5; 
+                dY = cy + 20 - p * 80; 
             } else if (t > 40) { 
-                // 階段 2：巨大化定格與威壓展示 (70 -> 40)
                 alpha = 1; 
-                scale = 2.0 + Math.sin(t * 0.2) * 0.05; // 稍微呼吸縮放的效果
-                dY = cy - 60 + Math.sin(t * 0.1) * 5; // 原地霸氣懸浮
+                scale = 2.0 + Math.sin(t * 0.2) * 0.05; 
+                dY = cy - 60 + Math.sin(t * 0.1) * 5; 
             } else { 
-                // 階段 3：稍微縮小並拔升就位 (40 -> 0)
-                const p = (40 - t) / 40; // 0 到 1
-                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // 緩動效果
+                const p = (40 - t) / 40; 
+                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; 
                 alpha = 1; 
-                scale = 2.0 - ep * 0.5; // 從 2.0 縮小至 1.5 適合噴金幣的大小
-                const startY = cy - 60, endY = 30; // 目標是畫面最頂端
+                scale = 2.0 - ep * 0.5; 
+                const startY = cy - 60, endY = 30; 
                 dY = startY - ep * (startY - endY); 
             }
             
