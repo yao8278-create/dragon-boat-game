@@ -245,7 +245,7 @@ const MAX_LEVEL = 5;
 // ==========================================
 // 🎨 AI 圖像生成服務 (金鑰與防卡死邏輯)
 // ==========================================
-const apiKey = ""; 
+const apiKey = "AIzaSyDBGDINEB6yrmO9kn33rFfvCvwv6ToYkjc"; 
 
 const generateAndProcessImage = async (promptText) => {
     if (!apiKey) throw new Error("No API Key configured");
