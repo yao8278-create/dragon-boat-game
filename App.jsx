@@ -21,7 +21,7 @@ try {
 // 🔄 圖片方向控制開關
 // ==========================================
 // 🌟 翻轉設定：如果你的圖片「船頭朝左」，請設定為 true。如果已經「船頭朝右」，請改為 false！
-const FLIP_SIDE_BOATS = true;
+const FLIP_SIDE_BOATS = false;
 
 // ==========================================
 // 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
@@ -684,6 +684,7 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
+    // 🌟 新單字展示防重疊優化
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
