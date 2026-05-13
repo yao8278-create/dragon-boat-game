@@ -3,25 +3,46 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// 🌟 初始化雲端環境 (支援 Canvas 預覽與 Vercel 部署雙棲模式)
+// ==========================================
+// ☁️ 專屬雲端資料庫設定 (Vercel 跨設備同步用)
+// ==========================================
+// 如果你想在 Vercel 網站上跨手機/電腦同步紀錄，
+// 請去 Google Firebase 免費建立專案，並將憑證填入這裡：
+const myFirebaseConfig = {
+  apiKey: "填入你的apiKey",
+  authDomain: "填入你的authDomain",
+  projectId: "填入你的projectId",
+  storageBucket: "填入你的storageBucket",
+  messagingSenderId: "填入你的messagingSenderId",
+  appId: "填入你的appId"
+};
+
+// 🌟 初始化雲端環境
 let app, auth, db;
-let appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
 try {
     if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        // AI 預覽環境：使用內建資料庫
         const firebaseConfig = JSON.parse(__firebase_config);
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
+    } else if (myFirebaseConfig.apiKey !== "填入你的apiKey") {
+        // Vercel 部署環境：如果你填寫了憑證，就連線到你的專屬資料庫！
+        app = initializeApp(myFirebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+    } else {
+        console.warn("未設定雲端資料庫，降級使用本機瀏覽器暫存 (無法跨設備同步)。");
     }
 } catch (error) {
-    console.warn("Cloud config not found, falling back to local storage.");
+    console.warn("Cloud config error, falling back to local storage.");
 }
 
 // ==========================================
 // 🔄 圖片方向控制開關
 // ==========================================
 // 🌟 翻轉設定：填入需要「水平翻轉」的船隻等級數字。
-// 船 4 和船 5 朝左需要翻轉朝右，因此設定為 [4, 5]
 const FLIP_SIDE_BOATS = [4, 5];
 
 // ==========================================
@@ -601,7 +622,7 @@ export default function App() {
     const maxLives = 2 + (parseInt(upgrades?.lives, 10) || 1); setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(maxLives); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsNewRecord(false); setIsHidingWordUI(true); 
     const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); const speedMult = window.innerWidth <= 768 ? 0.6 : 1.0;
     gameState.current = {
-      ...gameState.current, frames: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 180, wordIntroTimer: 0, summonTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
+      ...gameState.current, frames: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 260, wordIntroTimer: 0, summonTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
     };
   };
 
@@ -636,24 +657,25 @@ export default function App() {
     ctx.fillStyle = isFeverTime ? '#ffe58f' : stageConfig.bank; ctx.fillRect(0, 0, 20, state.canvasHeight); ctx.fillRect(state.canvasWidth - 20, 0, 20, state.canvasHeight); ctx.strokeStyle = isFeverTime ? '#ffd666' : stageConfig.line; ctx.lineWidth = 2;
     for(let i=0; i<6; i++) { const speedOffset = (state.introTimer > 0 || isAnimationPaused) ? 0 : (state.frames * state.speed); const yPos = (speedOffset + i * 120) % state.canvasHeight; ctx.beginPath(); ctx.moveTo(30, yPos); ctx.lineTo(30, yPos + 40); ctx.moveTo(state.canvasWidth - 30, yPos + 60); ctx.lineTo(state.canvasWidth - 30, yPos + 100); ctx.stroke(); }
     const currentLvl = parseInt(upgrades?.lives, 10) || 1; const boatScale = getBoatScale(currentLvl);
+    
     if (state.introTimer > 0) {
-        state.introTimer--; const progress = 1 - (state.introTimer / 180);
-        if (progress < 0.6) {
-            const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
+        state.introTimer--; const progress = 1 - (state.introTimer / 260);
+        if (progress < 0.7) {
+            const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.7) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
             if (sideImg) { 
-                // 🌟 將開場側邊龍舟的基礎尺寸放大一倍 (原本是 140x80，改為 280x140)
                 const baseW = 280, baseH = 140; 
                 if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); 
                 ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
             } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-100 * boatScale, -30 * boatScale, 200 * boatScale, 60 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 100); ctx.shadowBlur = 0;
         } else {
-            const p2 = (progress - 0.6) / 0.4; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
+            const p2 = (progress - 0.7) / 0.3; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
             const topImg = getTargetAsset(assets, `boat${currentLvl}_top`);
             if (topImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(topImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
         }
         if (state.introTimer === 1) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
     }
+    
     if (!isAnimationPaused) { state.player.x += state.player.dx; if (state.player.x < 25) state.player.x = 25; if (state.player.x + state.player.width > state.canvasWidth - 25) state.player.x = state.canvasWidth - 25 - state.player.width; }
     if (state.player.isInvincible && !isAnimationPaused) { state.player.invincibleTimer--; if (state.player.invincibleTimer <= 0) state.player.isInvincible = false; }
     if (!state.player.isInvincible || Math.floor(state.player.invincibleTimer / 5) % 2 === 0) {
@@ -782,57 +804,24 @@ export default function App() {
         const cx = state.canvasWidth / 2, cy = state.player.y - 120;
         const ritualWord = isGreat ? currentWordObj.fullWord : targetWord; const ritualMeaning = isGreat ? currentWordObj.fullMeaning : targetMeaning;
         if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
-        const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
         
-        const ballRadius = 20;
-        const ballDiameter = ballRadius * 2;
-        const isSingleRow = !isGreat || currentWordObj.stages.length === 1;
-        
-        // 🌟 核心修改：將光柱移到畫龍珠之前，並讓高度精準延伸到龍珠中心，消除空隙
+        // --- 動畫圖層 1：貫穿光柱 (放在最底層) ---
         if (t <= 140 && t > 0) {
-            const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
-            const beamHeight = isSingleRow ? cy + 120 : cy + 90; // 往下延伸至龍珠陣法中心點
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamHeight); ctx.restore();
+            const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); 
+            ctx.save(); ctx.globalAlpha = beamAlpha;
+            const bw = isGreat ? 160 : 120; 
+            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); 
+            grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); 
+            grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); 
+            grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); 
+            ctx.fillStyle = grad; 
+            // 讓光柱的高度延伸到「下排龍珠的底部」，營造出無縫接合的感覺
+            const beamHeight = cy + 160; 
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamHeight); 
+            ctx.restore();
         }
 
-        if (isSingleRow) {
-            const n = targetWord.length;
-            const startX = cx - (n * ballDiameter) / 2 + (ballDiameter / 2);
-            for (let i = 0; i < n; i++) {
-                const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30;
-                const tx = startX + i * ballDiameter; 
-                const ty = cy + 120; 
-                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
-            }
-        } else {
-            let prevWord = ""; for (let s = 0; s < currentStageIdx; s++) prevWord += currentWordObj.stages[s].word;
-            const n1 = prevWord.length;
-            const startX1 = cx - (n1 * ballDiameter) / 2 + (ballDiameter / 2);
-            for(let i = 0; i < n1; i++) {
-                const tx = startX1 + i * ballDiameter;
-                const ty = cy + 90; 
-                ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, ballRadius, prevWord[i], true, false, ritualGlow); ctx.globalAlpha = 1;
-            }
-            const n2 = targetWord.length;
-            const startX2 = cx - (n2 * ballDiameter) / 2 + (ballDiameter / 2);
-            for(let i = 0; i < n2; i++) {
-                const uiX = state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, uiY = 30;
-                const tx = startX2 + i * ballDiameter;
-                const ty = cy + 140; 
-                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
-            }
-        }
-        
-        if (isGreat && t <= 200) {
-            const textAlpha = Math.min(1, (200 - t) / 20); ctx.save(); ctx.globalAlpha = textAlpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const textY = 120; ctx.font = '900 36px sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = '#000000'; ctx.strokeText(`${ritualWord}`, cx, textY);
-            const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
-            ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
-        }
-        
+        // --- 動畫圖層 2：神龍本體 (疊在光柱前，龍珠後) ---
         if (t <= 130) {
             let dY, scale, alpha; 
             if (t > 70) { 
@@ -852,20 +841,82 @@ export default function App() {
                 const startY = cy - 60, endY = 30; 
                 dY = startY - ep * (startY - endY); 
             }
-            
-            ctx.save(); 
-            ctx.translate(cx, dY); 
-            ctx.globalAlpha = alpha; 
-            ctx.scale(scale, scale); 
-            if (assets?.dragon) { 
-                ctx.shadowBlur = 50; 
-                ctx.shadowColor = '#faad14'; 
-                ctx.drawImage(assets.dragon, -75, -75, 150, 150); 
-            } else { 
-                drawGeometricDragon(ctx); 
-            } 
+            ctx.save(); ctx.translate(cx, dY); ctx.globalAlpha = alpha; ctx.scale(scale, scale); 
+            if (assets?.dragon) { ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -75, -75, 150, 150); } 
+            else { drawGeometricDragon(ctx); } 
             ctx.restore();
         }
+
+        // --- 動畫圖層 3：龍珠陣法 (筆直排列) ---
+        // 飛下來時不發光，到定點後開始爆發充能
+        let isGlowing = t <= 200; 
+        let ritualGlow = 0;
+        if (isGlowing) {
+            if (t > 140) {
+                // 急遽充能階段
+                const chargeP = 1 - ((t - 140) / 60);
+                ritualGlow = Math.pow(chargeP, 4) * 30; 
+            } else {
+                ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
+            }
+        }
+        
+        const ballRadius = 20;
+        const ballDiameter = ballRadius * 2;
+        const isSingleRow = !isGreat || currentWordObj.stages.length === 1;
+
+        if (isSingleRow) {
+            const n = targetWord.length;
+            const startX = cx - (n * ballDiameter) / 2 + (ballDiameter / 2);
+            for (let i = 0; i < n; i++) {
+                const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30;
+                const tx = startX + i * ballDiameter; 
+                const ty = cy + 120; 
+                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
+                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], isGlowing, false, ritualGlow);
+            }
+        } else {
+            let prevWord = ""; for (let s = 0; s < currentStageIdx; s++) prevWord += currentWordObj.stages[s].word;
+            const n1 = prevWord.length;
+            const startX1 = cx - (n1 * ballDiameter) / 2 + (ballDiameter / 2);
+            for(let i = 0; i < n1; i++) {
+                const tx = startX1 + i * ballDiameter;
+                const ty = cy + 90; 
+                ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, ballRadius, prevWord[i], isGlowing, false, ritualGlow); ctx.globalAlpha = 1;
+            }
+            const n2 = targetWord.length;
+            const startX2 = cx - (n2 * ballDiameter) / 2 + (ballDiameter / 2);
+            for(let i = 0; i < n2; i++) {
+                const uiX = state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, uiY = 30;
+                const tx = startX2 + i * ballDiameter;
+                const ty = cy + 140; 
+                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
+                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], isGlowing, false, ritualGlow);
+            }
+        }
+        
+        // --- 動畫圖層 4：爆發耀斑 (全螢幕白光) ---
+        if (t <= 145 && t > 130) {
+            const flashP = t > 140 ? (145 - t) / 5 : (t - 130) / 10; 
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, Math.max(0, flashP));
+            const flashGrad = ctx.createRadialGradient(cx, cy + 120, 0, cx, cy + 120, 300);
+            flashGrad.addColorStop(0, '#ffffff');
+            flashGrad.addColorStop(0.5, '#faad14');
+            flashGrad.addColorStop(1, 'rgba(250, 173, 20, 0)');
+            ctx.fillStyle = flashGrad;
+            ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
+            ctx.restore();
+        }
+        
+        // --- 動畫圖層 5：巨大標題字 ---
+        if (isGreat && t <= 200) {
+            const textAlpha = Math.min(1, (200 - t) / 20); ctx.save(); ctx.globalAlpha = textAlpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const textY = 120; ctx.font = '900 36px sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = '#000000'; ctx.strokeText(`${ritualWord}`, cx, textY);
+            const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
+            ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
+        }
+
         if (t === 0) { setIsFeverTime(true); setIsHidingWordUI(false); audio.setMode('fever'); const fl = parseInt(upgrades?.fever, 10) || 1; state.feverTimer = (10 + (fl - 1) * 2) * 60; state.speed = 15 * state.speedMultiplier; state.items = []; setCollectedLetters([]); if (state.isGreatSummon) { const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); } else setCurrentStageIdx(prev => prev + 1); }
     }
     if (state.stageBannerTimer > 0) { state.stageBannerTimer--; ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, state.canvasHeight/4 - 30, state.canvasWidth, 60); ctx.fillStyle = '#fadb14'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`Stage ${state.currentStage}: ${stageConfig.name}`, state.canvasWidth/2, state.canvasHeight/4 + 8); }
@@ -896,7 +947,6 @@ export default function App() {
 
   if (currentView === 'loading') { return ( <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-gray-900 text-white p-6 text-center"> <div className="text-8xl mb-6 animate-bounce">✨</div> <h1 className="text-3xl font-black mb-4 text-blue-300">極速載入中...</h1> <p className="text-gray-400 mb-8 max-w-md">正在為您準備高畫質遊戲素材，請稍候！</p> <div className="w-full max-w-sm h-4 bg-gray-800 rounded-full overflow-hidden mb-2"><div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div></div> <p className="text-purple-300 font-bold">{loadingStatus}</p> </div> ); }
 
-  // 🌟 新增：登入畫面 (載入資源後會先導到這裡)
   if (currentView === 'login') {
       return (
           <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative">
@@ -936,7 +986,6 @@ export default function App() {
                   <div className="text-6xl mb-4">🐉🛶</div> 
                   <h1 className="text-4xl font-black text-blue-900 mb-1">端午龍舟長征</h1> 
                   
-                  {/* 🌟 顯示當前玩家與切換帳號按鈕 */}
                   <div className="flex flex-col items-center mb-5">
                       <p className="text-gray-500 font-bold text-sm">歡迎船長：<span className="text-blue-600">{playerName}</span></p>
                       <button onClick={() => setCurrentView('login')} className="text-xs text-gray-400 hover:text-gray-600 underline mt-1">切換名號</button>
