@@ -20,8 +20,9 @@ try {
 // ==========================================
 // 🔄 圖片方向控制開關
 // ==========================================
-// 🌟 翻轉設定：如果你的圖片「船頭朝左」，請設定為 true。如果已經「船頭朝右」，請改為 false！
-const FLIP_SIDE_BOATS = false;
+// 🌟 翻轉設定：填入需要「水平翻轉」的船隻等級數字。
+// 船 4 和船 5 朝左需要翻轉朝右，因此設定為 [4, 5]
+const FLIP_SIDE_BOATS = [4, 5];
 
 // ==========================================
 // 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
@@ -349,7 +350,7 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
             const baseW = 280, baseH = 125; let finalScale = targetScale;
             if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
             
-            if (FLIP_SIDE_BOATS) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+            if (FLIP_SIDE_BOATS.includes(level)) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
             ctx.drawImage(boatImg, -(baseW * finalScale) / 2, -(baseH * finalScale) / 2, baseW * finalScale, baseH * finalScale); 
         } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -30 * targetScale, -60 * targetScale, 60 * targetScale, 120 * targetScale, level); }
         ctx.restore();
@@ -391,14 +392,14 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
                 
-                if (FLIP_SIDE_BOATS && isSide) oCtx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(level) && isSide) oCtx.scale(-1, 1); // 🌟 水平翻轉圖片
                 oCtx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
                 
                 oCtx.globalCompositeOperation = 'source-in';
                 oCtx.fillStyle = '#000000'; oCtx.fillRect(-canvas.width, -canvas.height, canvas.width*2, canvas.height*2);
                 ctx.drawImage(offCanvas, -canvas.width/2, -canvas.height/2);
             } else {
-                if (FLIP_SIDE_BOATS && isSide) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(level) && isSide) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
                 ctx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
             }
         } else {
@@ -614,7 +615,7 @@ export default function App() {
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
             if (sideImg) { 
                 const baseW = 140, baseH = 80; 
-                if (FLIP_SIDE_BOATS) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
                 ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
             } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
