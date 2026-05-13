@@ -641,11 +641,12 @@ export default function App() {
         if (progress < 0.6) {
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
             if (sideImg) { 
-                const baseW = 140, baseH = 80; 
+                // 🌟 將開場側邊龍舟的基礎尺寸放大一倍 (原本是 140x80，改為 280x140)
+                const baseW = 280, baseH = 140; 
                 if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); 
                 ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
-            } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
-            ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
+            } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-100 * boatScale, -30 * boatScale, 200 * boatScale, 60 * boatScale); }
+            ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 100); ctx.shadowBlur = 0;
         } else {
             const p2 = (progress - 0.6) / 0.4; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
             const topImg = getTargetAsset(assets, `boat${currentLvl}_top`);
@@ -673,7 +674,6 @@ export default function App() {
             let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
             let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
             
-            // 🌟 將生成位置往上調，避免龍珠圖案在畫面頂端憑空出現
             const startY = type === 'coin' ? -40 : -80; 
             state.items.push({ x: xPos, y: startY, width: 40, height: 40, type, char, color, dx: 0, dy: 0 });
         }
@@ -695,23 +695,20 @@ export default function App() {
                 ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 20, item.y + 20, 18, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); 
             } 
         } else {
-            // 🌟 字母氣球與粽子渲染邏輯
             const hoverY = Math.sin(state.frames * 0.15) * 4; 
             const orbX = item.x + 20;
-            const orbY = item.y - 35 + hoverY; // 龍珠在粽子上方飄動
+            const orbY = item.y - 35 + hoverY; 
 
-            // 畫棉繩 (從龍珠底部連接到粽子頂部)
             ctx.save();
             ctx.beginPath();
             ctx.moveTo(orbX, orbY);
             ctx.lineTo(item.x + 20, item.y + 5);
-            ctx.strokeStyle = '#d48806'; // 繩子顏色
+            ctx.strokeStyle = '#d48806'; 
             ctx.lineWidth = 2;
-            ctx.setLineDash([4, 2]); // 虛線模擬扭繩的紋理
+            ctx.setLineDash([4, 2]); 
             ctx.stroke();
             ctx.restore();
 
-            // 畫底部的粽子 (作為實際碰撞區，在 item.y 的位置)
             const zongziImg = getTargetAsset(assets, 'zongzi'); 
             if (zongziImg) { 
                 ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; 
@@ -721,27 +718,22 @@ export default function App() {
                 ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+20, item.y); ctx.lineTo(item.x+40, item.y+30); ctx.lineTo(item.x, item.y+30); ctx.fill(); 
             }
             
-            // 畫頂部的龍珠氣球
             drawDragonBall(ctx, orbX, orbY, 22, item.char, true, false); 
         }
 
-        // 🌟 碰撞判定 (因為 item.y 對應的是粽子的位置，所以只有撞到粽子才會觸發！)
         if (!isAnimationPaused && checkCollision(state.player, item)) {
             if (item.type === 'letter') { 
                 const orbX = item.x + 20;
                 const orbY = item.y - 35 + Math.sin(state.frames * 0.15) * 4;
                 
-                // 粽子葉爆開特效
                 state.effects.push({ type: 'leaf_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 30 }); 
                 
                 const isCorrect = item.char === nextNeededChar;
                 if (isCorrect) { 
                     const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; 
-                    // 龍珠氣球飛上去收集
                     state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: orbX, startY: orbY, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); 
                     handleCollectedLetter(item.char, targetWord); 
                 } else { 
-                    // 錯的龍珠氣球直接飄走
                     state.effects.push({ type: 'letter_ascend', char: item.char, x: orbX, y: orbY, frames: 0, maxFrames: 45 }); 
                 }
             } else if (item.type === 'coin') { 
@@ -768,7 +760,6 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
-    // 🌟 新單字展示防重疊優化
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
@@ -793,17 +784,25 @@ export default function App() {
         if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
         const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
         
-        // 🌟 改為直線緊湊排列設定 (半徑 20，直徑 40)
         const ballRadius = 20;
         const ballDiameter = ballRadius * 2;
+        const isSingleRow = !isGreat || currentWordObj.stages.length === 1;
         
-        if (!isGreat || currentWordObj.stages.length === 1) {
+        // 🌟 核心修改：將光柱移到畫龍珠之前，並讓高度精準延伸到龍珠中心，消除空隙
+        if (t <= 140 && t > 0) {
+            const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
+            const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
+            const beamHeight = isSingleRow ? cy + 120 : cy + 90; // 往下延伸至龍珠陣法中心點
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamHeight); ctx.restore();
+        }
+
+        if (isSingleRow) {
             const n = targetWord.length;
             const startX = cx - (n * ballDiameter) / 2 + (ballDiameter / 2);
             for (let i = 0; i < n; i++) {
                 const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30;
-                const tx = startX + i * ballDiameter; // 直線排列，間距為直徑 (緊密貼合)
-                const ty = cy + 120; // 固定的水平高度
+                const tx = startX + i * ballDiameter; 
+                const ty = cy + 120; 
                 let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
                 drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
             }
@@ -813,7 +812,7 @@ export default function App() {
             const startX1 = cx - (n1 * ballDiameter) / 2 + (ballDiameter / 2);
             for(let i = 0; i < n1; i++) {
                 const tx = startX1 + i * ballDiameter;
-                const ty = cy + 90; // 上排高度
+                const ty = cy + 90; 
                 ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, ballRadius, prevWord[i], true, false, ritualGlow); ctx.globalAlpha = 1;
             }
             const n2 = targetWord.length;
@@ -821,30 +820,17 @@ export default function App() {
             for(let i = 0; i < n2; i++) {
                 const uiX = state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, uiY = 30;
                 const tx = startX2 + i * ballDiameter;
-                const ty = cy + 140; // 下排高度
+                const ty = cy + 140; 
                 let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
                 drawDragonBall(ctx, x, y, ballRadius, targetWord[i], true, false, ritualGlow);
             }
         }
+        
         if (isGreat && t <= 200) {
             const textAlpha = Math.min(1, (200 - t) / 20); ctx.save(); ctx.globalAlpha = textAlpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             const textY = 120; ctx.font = '900 36px sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = '#000000'; ctx.strokeText(`${ritualWord}`, cx, textY);
             const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
-        }
-        
-        if (t <= 140 && t > 0) {
-            const beamP = Math.min(1, (140 - t) / 20);
-            const beamAlpha = Math.min(1, t / 30); 
-            ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? 160 : 120; 
-            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); 
-            grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); 
-            grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); 
-            grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); 
-            ctx.fillStyle = grad; 
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy + 90); 
-            ctx.restore();
         }
         
         if (t <= 130) {
