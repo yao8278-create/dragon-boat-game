@@ -248,12 +248,15 @@ const MAX_LEVEL = 5;
 const loadImage = (srcUrl) => {
     return new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = "Anonymous"; // 確保 Canvas 畫圖時不會因為跨網域被阻擋
         img.onload = () => resolve(img);
         img.onerror = () => {
             console.warn(`[載入警告] 找不到圖片: ${srcUrl}，將使用備用幾何圖形。`);
             resolve(null);
         };
-        img.src = srcUrl; 
+        // 🌟 這裡直接拼上你的 GitHub Raw 網址，這樣不管怎麼打包都絕對讀得到圖片！
+        const githubBaseUrl = "https://raw.githubusercontent.com/yao8278-create/dragon-boat-game/main/";
+        img.src = githubBaseUrl + srcUrl; 
     });
 };
 
@@ -501,7 +504,7 @@ export default function App() {
   }, [currentView, isFeverTime]);
 
   // ==========================================
-  // 🚀 核心更新：使用字串路徑的靜態圖檔載入邏輯
+  // 🚀 核心更新：使用 GitHub Raw 靜態圖檔載入邏輯
   // ==========================================
   useEffect(() => {
       const initAssets = async () => {
@@ -510,7 +513,7 @@ export default function App() {
           setLoadingStatus(`正在載入固定圖檔...`);
           setLoadingProgress(10);
 
-          // 🌟 使用字串路徑對應您上傳至 GitHub 的檔案
+          // 🌟 這裡只需填寫圖片的檔案名稱
           const imageList = [
               { key: 'boat1_side', src: 'boat1_side.png' },
               { key: 'boat1_top', src: 'boat1_top.png' },
