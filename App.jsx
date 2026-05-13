@@ -261,7 +261,6 @@ const loadImage = (srcUrl) => {
             console.warn(`[載入警告] 找不到圖片: ${srcUrl}，將使用備用幾何圖形。`);
             resolve(null);
         };
-        // 使用 GitHub Raw 網址，確保直接抓取您上傳的圖片 (不需編譯解析)
         const githubBaseUrl = "https://raw.githubusercontent.com/yao8278-create/dragon-boat-game/main/";
         img.src = githubBaseUrl + srcUrl; 
     });
@@ -329,9 +328,9 @@ const drawGeometricBoat = (ctx, x, y, width, height, levelInput) => {
     ctx.restore();
 };
 
-const drawGeometricDragon = (ctx, w, h) => {
-    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(w/2, h/2, 50, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f5222d'; ctx.fillRect(w/2-25, h/2-10, 15, 5); ctx.fillRect(w/2+10, h/2-10, 15, 5);
+const drawGeometricDragon = (ctx) => {
+    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f5222d'; ctx.fillRect(-25, -10, 15, 5); ctx.fillRect(10, -10, 15, 5);
 };
 
 const getTargetAsset = (assets, name) => (!assets || Object.keys(assets).length === 0) ? null : assets[name];
@@ -350,7 +349,7 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
             const baseW = 280, baseH = 125; let finalScale = targetScale;
             if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
             
-            if (FLIP_SIDE_BOATS.includes(level)) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+            if (FLIP_SIDE_BOATS.includes(level)) ctx.scale(-1, 1); 
             ctx.drawImage(boatImg, -(baseW * finalScale) / 2, -(baseH * finalScale) / 2, baseW * finalScale, baseH * finalScale); 
         } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -30 * targetScale, -60 * targetScale, 60 * targetScale, 120 * targetScale, level); }
         ctx.restore();
@@ -392,14 +391,14 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
                 
-                if (FLIP_SIDE_BOATS.includes(level) && isSide) oCtx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(level) && isSide) oCtx.scale(-1, 1); 
                 oCtx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
                 
                 oCtx.globalCompositeOperation = 'source-in';
                 oCtx.fillStyle = '#000000'; oCtx.fillRect(-canvas.width, -canvas.height, canvas.width*2, canvas.height*2);
                 ctx.drawImage(offCanvas, -canvas.width/2, -canvas.height/2);
             } else {
-                if (FLIP_SIDE_BOATS.includes(level) && isSide) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(level) && isSide) ctx.scale(-1, 1); 
                 ctx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
             }
         } else {
@@ -516,9 +515,6 @@ export default function App() {
       else audio.setMode('stopped');
   }, [currentView, isFeverTime]);
 
-  // ==========================================
-  // 🚀 核心更新：使用字串路徑的靜態圖檔載入邏輯
-  // ==========================================
   useEffect(() => {
       const initAssets = async () => {
           let loadedAssets = {};
@@ -615,7 +611,7 @@ export default function App() {
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
             if (sideImg) { 
                 const baseW = 140, baseH = 80; 
-                if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+                if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); 
                 ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
             } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
@@ -641,11 +637,11 @@ export default function App() {
         if (state.feverTimer <= 0) { setIsFeverTime(false); audio.setMode('game'); state.speed = state.baseSpeed; setIsHidingWordUI(true); state.wordIntroTimer = 150; if (state.lastNotifiedStage !== state.currentStage) { state.stageBannerTimer = 120; state.lastNotifiedStage = state.currentStage; } }
     } 
     if (!isAnimationPaused && state.frames % (isFeverTime ? 4 : 70) === 0) {
-        if (isFeverTime) { state.items.push({ x: state.canvasWidth/2 - 15, y: 80, width: 30, height: 30, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); } 
+        if (isFeverTime) { state.items.push({ x: state.canvasWidth/2 - 20, y: 80, width: 40, height: 40, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); } 
         else {
             let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
             let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
-            state.items.push({ x: xPos, y: -30, width: 30, height: 30, type, char, color, dx: 0, dy: 0 });
+            state.items.push({ x: xPos, y: -40, width: 40, height: 40, type, char, color, dx: 0, dy: 0 });
         }
     }
     if (!isAnimationPaused && !isFeverTime && state.frames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
@@ -656,15 +652,28 @@ export default function App() {
     }
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i]; if (!isAnimationPaused) { item.x += item.dx || 0; item.y += item.dy || state.speed; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
-        if (item.type === 'coin') { const coinImg = getTargetAsset(assets, 'coin'); if (coinImg) { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x - 5, item.y - 5, 40, 40); ctx.restore(); } else { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 14, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); } } else {
-            const zongziImg = getTargetAsset(assets, 'zongzi'); if (zongziImg) { ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.drawImage(zongziImg, item.x, item.y + 5, 30, 30); ctx.restore(); } else { ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+15, item.y+5); ctx.lineTo(item.x+30, item.y+30); ctx.lineTo(item.x, item.y+30); ctx.fill(); }
-            const hoverY = Math.sin(state.frames * 0.15) * 3; drawDragonBall(ctx, item.x + 15, item.y + hoverY, 12, item.char, true, false);
+        if (item.type === 'coin') { 
+            const coinImg = getTargetAsset(assets, 'coin'); 
+            if (coinImg) { 
+                ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x, item.y, 40, 40); ctx.restore(); 
+            } else { 
+                ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 20, item.y + 20, 18, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); 
+            } 
+        } else {
+            const zongziImg = getTargetAsset(assets, 'zongzi'); 
+            if (zongziImg) { 
+                ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.drawImage(zongziImg, item.x, item.y + 5, 40, 40); ctx.restore(); 
+            } else { 
+                ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+20, item.y+5); ctx.lineTo(item.x+40, item.y+35); ctx.lineTo(item.x, item.y+35); ctx.fill(); 
+            }
+            const hoverY = Math.sin(state.frames * 0.15) * 4; 
+            drawDragonBall(ctx, item.x + 20, item.y + 10 + hoverY, 22, item.char, true, false); 
         }
         if (!isAnimationPaused && checkCollision(state.player, item)) {
             if (item.type === 'letter') { 
-                state.effects.push({ type: 'leaf_burst', x: item.x + 15, y: item.y + 15, frames: 0, maxFrames: 30 }); const isCorrect = item.char === nextNeededChar;
-                if (isCorrect) { const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: item.x + 15, startY: item.y, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); handleCollectedLetter(item.char, targetWord); } else { state.effects.push({ type: 'letter_ascend', char: item.char, x: item.x + 15, y: item.y, frames: 0, maxFrames: 45 }); }
-            } else if (item.type === 'coin') { state.effects.push({ type: 'coin_burst', x: item.x + 15, y: item.y + 15, frames: 0, maxFrames: 20 }); audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); }
+                state.effects.push({ type: 'leaf_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 30 }); const isCorrect = item.char === nextNeededChar;
+                if (isCorrect) { const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: item.x + 20, startY: item.y, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); handleCollectedLetter(item.char, targetWord); } else { state.effects.push({ type: 'letter_ascend', char: item.char, x: item.x + 20, y: item.y, frames: 0, maxFrames: 45 }); }
+            } else if (item.type === 'coin') { state.effects.push({ type: 'coin_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 20 }); audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); }
             state.items.splice(i, 1); continue;
         }
         if (item.y > state.canvasHeight) state.items.splice(i, 1);
@@ -685,7 +694,6 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
-    // 🌟 新單字展示防重疊優化
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
@@ -742,13 +750,58 @@ export default function App() {
             const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
+        
+        // 🌟 核心修改：神龍召喚動畫重製 (光柱爆發 -> 原地巨大化 -> 升空)
         if (t <= 140 && t > 0) {
-            const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy + 90); ctx.restore();
+            // 光柱動畫：140 開始出現，隨後漸淡
+            const beamP = Math.min(1, (140 - t) / 20);
+            const beamAlpha = Math.min(1, t / 30); 
+            ctx.save(); ctx.globalAlpha = beamAlpha;
+            const bw = isGreat ? 160 : 120; 
+            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); 
+            grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); 
+            grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); 
+            grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); 
+            ctx.fillStyle = grad; 
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy + 90); 
+            ctx.restore();
         }
-        if (t <= 110) {
-            let dY, scale, alpha = 1; if (t > 40) { const p = (110 - t) / 30; const startY = -150, targetY = cy + 20; dY = startY + Math.min(1, p) * (targetY - startY); scale = 1.0 + Math.min(1, p) * 0.5; if (t > 80) alpha = Math.min(1, (110 - t) / 15); } else { const p = (40 - t) / 40; const startY = cy + 20, endY = 30; const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; dY = startY - ep * (startY - endY); scale = 1.5 - ep * 0.7; }
-            ctx.save(); ctx.translate(cx, dY); ctx.globalAlpha = alpha; ctx.scale(scale, scale); if (assets?.dragon) { ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -75, -75, 150, 150); } else drawGeometricDragon(ctx, state.canvasWidth, state.canvasHeight); ctx.restore();
+        
+        if (t <= 130) {
+            let dY, scale, alpha; 
+            if (t > 70) { 
+                // 階段 1：從光柱與龍珠中浮現並巨大化 (130 -> 70)
+                const p = (130 - t) / 60; // 0 到 1
+                alpha = Math.min(1, p * 2); // 快速淡入
+                scale = 0.5 + p * 1.5; // 從 0.5 放大到 2.0
+                dY = cy + 20 - p * 80; // 從龍珠位置往上浮起一點點
+            } else if (t > 40) { 
+                // 階段 2：巨大化定格與威壓展示 (70 -> 40)
+                alpha = 1; 
+                scale = 2.0 + Math.sin(t * 0.2) * 0.05; // 稍微呼吸縮放的效果
+                dY = cy - 60 + Math.sin(t * 0.1) * 5; // 原地霸氣懸浮
+            } else { 
+                // 階段 3：稍微縮小並拔升就位 (40 -> 0)
+                const p = (40 - t) / 40; // 0 到 1
+                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // 緩動效果
+                alpha = 1; 
+                scale = 2.0 - ep * 0.5; // 從 2.0 縮小至 1.5 適合噴金幣的大小
+                const startY = cy - 60, endY = 30; // 目標是畫面最頂端
+                dY = startY - ep * (startY - endY); 
+            }
+            
+            ctx.save(); 
+            ctx.translate(cx, dY); 
+            ctx.globalAlpha = alpha; 
+            ctx.scale(scale, scale); 
+            if (assets?.dragon) { 
+                ctx.shadowBlur = 50; 
+                ctx.shadowColor = '#faad14'; 
+                ctx.drawImage(assets.dragon, -75, -75, 150, 150); 
+            } else { 
+                drawGeometricDragon(ctx); 
+            } 
+            ctx.restore();
         }
         if (t === 0) { setIsFeverTime(true); setIsHidingWordUI(false); audio.setMode('fever'); const fl = parseInt(upgrades?.fever, 10) || 1; state.feverTimer = (10 + (fl - 1) * 2) * 60; state.speed = 15 * state.speedMultiplier; state.items = []; setCollectedLetters([]); if (state.isGreatSummon) { const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); } else setCurrentStageIdx(prev => prev + 1); }
     }
