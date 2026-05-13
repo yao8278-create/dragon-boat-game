@@ -18,6 +18,12 @@ try {
 }
 
 // ==========================================
+// 🔄 圖片方向控制開關
+// ==========================================
+// 🌟 翻轉設定：如果你的圖片「船頭朝左」，請設定為 true。如果已經「船頭朝右」，請改為 false！
+const FLIP_SIDE_BOATS = true;
+
+// ==========================================
 // 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
 // ==========================================
 class SynthEngine {
@@ -243,18 +249,18 @@ const UPGRADE_COSTS = [0, 100, 300, 600, 1000, 1500];
 const MAX_LEVEL = 5;
 
 // ==========================================
-// 🖼️ 靜態圖檔載入系統 (完全取代 AI API)
+// 🖼️ 靜態圖檔載入系統
 // ==========================================
 const loadImage = (srcUrl) => {
     return new Promise((resolve) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // 確保 Canvas 畫圖時不會因為跨網域被阻擋
+        img.crossOrigin = "Anonymous"; 
         img.onload = () => resolve(img);
         img.onerror = () => {
             console.warn(`[載入警告] 找不到圖片: ${srcUrl}，將使用備用幾何圖形。`);
             resolve(null);
         };
-        // 🌟 這裡直接拼上你的 GitHub Raw 網址，這樣不管怎麼打包都絕對讀得到圖片！
+        // 使用 GitHub Raw 網址，確保直接抓取您上傳的圖片 (不需編譯解析)
         const githubBaseUrl = "https://raw.githubusercontent.com/yao8278-create/dragon-boat-game/main/";
         img.src = githubBaseUrl + srcUrl; 
     });
@@ -342,6 +348,8 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
         if (boatImg) { 
             const baseW = 280, baseH = 125; let finalScale = targetScale;
             if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
+            
+            if (FLIP_SIDE_BOATS) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
             ctx.drawImage(boatImg, -(baseW * finalScale) / 2, -(baseH * finalScale) / 2, baseW * finalScale, baseH * finalScale); 
         } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -30 * targetScale, -60 * targetScale, 60 * targetScale, 120 * targetScale, level); }
         ctx.restore();
@@ -382,11 +390,15 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
                 const offCanvas = document.createElement('canvas'); offCanvas.width = canvas.width; offCanvas.height = canvas.height;
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
+                
+                if (FLIP_SIDE_BOATS && isSide) oCtx.scale(-1, 1); // 🌟 水平翻轉圖片
                 oCtx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
+                
                 oCtx.globalCompositeOperation = 'source-in';
                 oCtx.fillStyle = '#000000'; oCtx.fillRect(-canvas.width, -canvas.height, canvas.width*2, canvas.height*2);
                 ctx.drawImage(offCanvas, -canvas.width/2, -canvas.height/2);
             } else {
+                if (FLIP_SIDE_BOATS && isSide) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
                 ctx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
             }
         } else {
@@ -504,7 +516,7 @@ export default function App() {
   }, [currentView, isFeverTime]);
 
   // ==========================================
-  // 🚀 核心更新：使用 GitHub Raw 靜態圖檔載入邏輯
+  // 🚀 核心更新：使用字串路徑的靜態圖檔載入邏輯
   // ==========================================
   useEffect(() => {
       const initAssets = async () => {
@@ -513,7 +525,6 @@ export default function App() {
           setLoadingStatus(`正在載入固定圖檔...`);
           setLoadingProgress(10);
 
-          // 🌟 這裡只需填寫圖片的檔案名稱
           const imageList = [
               { key: 'boat1_side', src: 'boat1_side.png' },
               { key: 'boat1_top', src: 'boat1_top.png' },
@@ -601,7 +612,11 @@ export default function App() {
         state.introTimer--; const progress = 1 - (state.introTimer / 180);
         if (progress < 0.6) {
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
-            if (sideImg) { const baseW = 140, baseH = 80; ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
+            if (sideImg) { 
+                const baseW = 140, baseH = 80; 
+                if (FLIP_SIDE_BOATS) ctx.scale(-1, 1); // 🌟 水平翻轉圖片
+                ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
+            } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
         } else {
             const p2 = (progress - 0.6) / 0.4; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
