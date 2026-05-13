@@ -243,60 +243,18 @@ const UPGRADE_COSTS = [0, 100, 300, 600, 1000, 1500];
 const MAX_LEVEL = 5;
 
 // ==========================================
-// 🎨 AI 圖像生成服務
+// 🖼️ 靜態圖檔載入系統 (完全取代 AI API)
 // ==========================================
-const apiKey = "AIzaSyDBGDINEB6yrmO9kn33rFfvCvwv6ToYkjc"; 
-const generateAndProcessImage = async (promptText) => {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
-    const payload = { instances: [{ prompt: promptText }], parameters: { sampleCount: 1 } };
-    const fetchWithBackoff = async (retries = 5, delays = [1000, 2000, 4000, 8000, 16000]) => {
-        try {
-            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            const data = await res.json();
-            if (!data.predictions || !data.predictions[0]) throw new Error("No prediction");
-            return `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
-        } catch (err) {
-            if (retries === 0) throw err;
-            await new Promise(r => setTimeout(r, delays[5 - retries]));
-            return fetchWithBackoff(retries - 1, delays);
-        }
-    };
-    const b64 = await fetchWithBackoff();
-    return new Promise((resolve, reject) => {
-        const img = new Image(); img.crossOrigin = "Anonymous";
-        img.onload = () => {
-            const canvas = document.createElement('canvas'); const MAX_SIZE = 256; let w = img.width, h = img.height;
-            if (w > MAX_SIZE || h > MAX_SIZE) { if (w > h) { h = Math.round(h * MAX_SIZE / w); w = MAX_SIZE; } else { w = Math.round(w * MAX_SIZE / h); h = MAX_SIZE; } }
-            canvas.width = w; canvas.height = h; const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            ctx.drawImage(img, 0, 0, w, h); const imageData = ctx.getImageData(0, 0, w, h); const data = imageData.data; const bgR = data[0], bgG = data[1], bgB = data[2];
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i], g = data[i+1], b = data[i+2]; const dist = Math.sqrt(Math.pow(r-bgR,2) + Math.pow(g-bgG,2) + Math.pow(b-bgB,2));
-                if (dist < 40) data[i+3] = 0; else if (dist < 60) data[i+3] = 128; 
-            }
-            ctx.putImageData(imageData, 0, 0); const finalImg = new Image(); finalImg.onload = () => resolve(finalImg); finalImg.src = canvas.toDataURL('image/png');
+const loadImage = (srcUrl) => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => {
+            console.warn(`[載入警告] 找不到圖片: ${srcUrl}，將使用備用幾何圖形。`);
+            resolve(null);
         };
-        img.onerror = reject; img.src = b64;
+        img.src = srcUrl; 
     });
-};
-
-const PROMPTS = {
-    boat1_side: "A primitive simple small wooden log raft canoe, side profile view pointing right, 2d game sprite, flat graphic, isolated on white background",
-    boat2_side: "A classic traditional red wooden Chinese dragon boat, side profile view pointing right, 2d game sprite, flat graphic, isolated on white background",
-    boat3_side: "A heavy industrial steampunk ironclad dragon boat, hull covered in thick dark steel armor plates and bronze spikes. Featuring a glowing coal furnace in the center. The front is a menacing cast-iron dragon head. Side profile view pointing right, 2d game sprite, flat graphic, isolated on white background",
-    boat4_side: "A MASSIVE, extremely complex, multi-deck luxurious royal jade and pure gold emperor dragon boat featuring a highly prominent, majestic golden dragon head at the front, side profile view pointing right, 2d game sprite, flat graphic, isolated on white background",
-    boat5_side: "A COLOSSAL, EXTREMELY THICK and BULKY cyberpunk mechanical DREADNOUGHT dragon boat. Towering multi-layered heavy armor superstructure like a floating fortress. The front is a massive, menacing high-tech robotic mecha-dragon head. NO PADDLES, it floats using massive glowing blue plasma hover-engines underneath. Thick purple warp nacelles at the heavy rear. Pure white and silver heavy armor plating with glowing cyan neon lines. Side profile view pointing right, 2d game sprite, flat graphic, isolated on white background",
-    boat1_top: "A primitive simple small wooden log raft canoe, top-down view pointing upwards, vertically aligned, 2d game sprite, isolated on white background",
-    boat2_top: "A classic traditional red wooden Chinese dragon boat, top-down view pointing upwards, vertically aligned, 2d game sprite, isolated on white background",
-    boat3_top: "A heavy industrial steampunk ironclad dragon boat, hull covered in thick dark steel armor plates and bronze spikes. Featuring a glowing coal furnace in the center. The front is a menacing cast-iron dragon head. Top-down view pointing upwards, vertically aligned, 2d game sprite, isolated on white background",
-    boat4_top: "A MASSIVE, extremely complex, multi-deck luxurious royal jade and pure gold emperor dragon boat featuring a highly prominent, majestic golden dragon head at the front, top-down view pointing upwards, vertically aligned, 2d game sprite, isolated on white background",
-    boat5_top: "A COLOSSAL, EXTREMELY WIDE and BULKY cyberpunk mechanical DREADNOUGHT dragon boat. Massive wide heavy armor superstructure like a floating fortress. The front is a massive, menacing high-tech robotic mecha-dragon head. NO PADDLES, massive glowing blue plasma hover-engines and heavy armor blocks extending outward from the sides. Thick purple warp nacelles at the extremely wide heavy rear. Pure white and silver heavy armor plating with glowing cyan neon lines. Top-down view pointing upwards, vertically aligned, 2d game sprite, isolated on white background",
-    dragon: "A majestic fierce golden Chinese dragon face, front view, 2d game boss art, isolated on white background",
-    fish: "A leaping orange river fish, top-down 2d game sprite, isolated on white background",
-    whirlpool: "A dangerous swirling blue water whirlpool, top-down 2d game sprite, isolated on white background",
-    ghost_ship: "A glowing cyan ghostly ancient ship, top-down 2d game sprite, isolated on white background",
-    zongzi: "A 2D game icon of a delicious traditional Chinese Zongzi wrapped in green bamboo leaves tied with string, flat vector style, isolated on white background",
-    coin: "A shiny bright gold coin with a square hole in the middle, 2D game icon, isolated on white background"
 };
 
 const checkCollision = (rect1, rect2) => (
@@ -366,10 +324,9 @@ const drawGeometricDragon = (ctx, w, h) => {
     ctx.fillStyle = '#f5222d'; ctx.fillRect(w/2-25, h/2-10, 15, 5); ctx.fillRect(w/2+10, h/2-10, 15, 5);
 };
 
-const getTargetAsset = (assets, name) => (!assets || assets === "fallback") ? null : assets[name];
+const getTargetAsset = (assets, name) => (!assets || Object.keys(assets).length === 0) ? null : assets[name];
 const getBoatScale = (level) => ({ 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5 }[Math.min(level, 5)] || 1.0);
 
-// 🌟 修改：BoatPreview 增加神祕遮蔽效果
 const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
     const previewCanvasRef = useRef(null);
     useEffect(() => {
@@ -400,7 +357,6 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
     );
 };
 
-// 🌟 修改：LargeBoatPreview 增加剪影效果
 const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
     const canvasRef = useRef(null);
     useEffect(() => {
@@ -418,10 +374,8 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
             if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
             
             if (isLocked) {
-                // 🌟 繪製發光剪影 (Silhouette with glow)
                 ctx.shadowBlur = 40; ctx.shadowColor = '#00e5ff';
                 ctx.globalCompositeOperation = 'source-over';
-                // 離屏繪製剪影
                 const offCanvas = document.createElement('canvas'); offCanvas.width = canvas.width; offCanvas.height = canvas.height;
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
@@ -449,12 +403,11 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
 export default function App() {
   const canvasRef = useRef(null);
   const [currentView, setCurrentView] = useState('loading');
-  const [assets, setAssets] = useState(null);
+  const [assets, setAssets] = useState({});
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingStatus, setLoadingStatus] = useState("準備背景資源...");
+  const [loadingStatus, setLoadingStatus] = useState("正在讀取遊戲資源...");
   const [isAudioMuted, setIsAudioMuted] = useState(true);
   const [galleryLevel, setGalleryLevel] = useState(null);
-  const retryQueueRef = useRef([]);
 
   useEffect(() => {
       const unlockAudio = () => {
@@ -547,43 +500,57 @@ export default function App() {
       else audio.setMode('stopped');
   }, [currentView, isFeverTime]);
 
+  // ==========================================
+  // 🚀 核心更新：使用字串路徑的靜態圖檔載入邏輯
+  // ==========================================
   useEffect(() => {
       const initAssets = async () => {
-          const currentLvl = Math.min(parseInt(safeGetStorage('db_upgrades', { lives: 1 }, true)?.lives || 1, 10), 5);
           let loadedAssets = {};
-          try {
-              setLoadingStatus(`優先載入核心龍舟與神龍中...`); setLoadingProgress(40);
-              const coreTasks = [{ key: `boat${currentLvl}_top`, p: PROMPTS[`boat${currentLvl}_top`] }, { key: `boat${currentLvl}_side`, p: PROMPTS[`boat${currentLvl}_side`] }, { key: 'dragon', p: PROMPTS.dragon }];
-              const results = await Promise.allSettled(coreTasks.map(t => generateAndProcessImage(t.p)));
-              results.forEach((res, index) => { if (res.status === 'fulfilled') loadedAssets[coreTasks[index].key] = res.value; else retryQueueRef.current.push(coreTasks[index]); });
-              setAssets(loadedAssets); setLoadingProgress(100); setCurrentView('menu'); 
-              const extraPrompts = [{ key: 'fish', p: PROMPTS.fish }, { key: 'whirlpool', p: PROMPTS.whirlpool }, { key: 'ghost_ship', p: PROMPTS.ghost_ship }, { key: 'zongzi', p: PROMPTS.zongzi }, { key: 'coin', p: PROMPTS.coin }];
-              [1, 2, 3, 4, 5].filter(l => l !== currentLvl).forEach(l => { extraPrompts.push({ key: `boat${l}_top`, p: PROMPTS[`boat${l}_top`] }); extraPrompts.push({ key: `boat${l}_side`, p: PROMPTS[`boat${l}_side`] }); });
-              const loadExtraAssets = async () => {
-                  const batchSize = 3;
-                  for (let i = 0; i < extraPrompts.length; i += batchSize) {
-                      const batch = extraPrompts.slice(i, i + batchSize);
-                      await Promise.all(batch.map(async (item) => { try { const img = await generateAndProcessImage(item.p); setAssets(prev => { if (!prev) return prev; return { ...prev, [item.key]: img }; }); } catch (e) { retryQueueRef.current.push(item); } }));
-                      if (i + batchSize < extraPrompts.length) await new Promise(resolve => setTimeout(resolve, 800));
-                  }
-              };
-              loadExtraAssets();
-          } catch (e) { setLoadingStatus("系統異常，啟用全備用模式..."); setLoadingProgress(100); setTimeout(() => { setAssets({}); setCurrentView('menu'); }, 1500); }
-      };
-      initAssets();
-  }, []);
+          
+          setLoadingStatus(`正在載入固定圖檔...`);
+          setLoadingProgress(10);
 
-  useEffect(() => {
-      let isPolling = false; let timerId = null;
-      const pollQueue = async () => {
-          if (!isPolling && retryQueueRef.current.length > 0) {
-              isPolling = true; const batch = retryQueueRef.current.splice(0, 2);
-              for (const item of batch) { try { const img = await generateAndProcessImage(item.p); setAssets(prev => { if (!prev) return prev; return { ...prev, [item.key]: img }; }); } catch (e) { retryQueueRef.current.push(item); } await new Promise(r => setTimeout(r, 1500)); }
-              isPolling = false;
-          }
-          timerId = setTimeout(pollQueue, 30000);
+          // 🌟 使用字串路徑對應您上傳至 GitHub 的檔案
+          const imageList = [
+              { key: 'boat1_side', src: 'boat1_side.png' },
+              { key: 'boat1_top', src: 'boat1_top.png' },
+              { key: 'boat2_side', src: 'boat2_side.png' },
+              { key: 'boat2_top', src: 'boat2_top.png' },
+              { key: 'boat3_side', src: 'boat3_side.png' },
+              { key: 'boat3_top', src: 'boat3_top.png' },
+              { key: 'boat4_side', src: 'boat4_side.png' },
+              { key: 'boat4_top', src: 'boat4_top.png' },
+              { key: 'boat5_side', src: 'boat5_side.png' },
+              { key: 'boat5_top', src: 'boat5_top.png' },
+              { key: 'dragon', src: 'dragon.png' },
+              { key: 'fish', src: 'fish.png' },
+              { key: 'whirlpool', src: 'whirlpool.png' },
+              { key: 'ghost_ship', src: 'ghost_ship.png' },
+              { key: 'zongzi', src: 'zongzi.png' },
+              { key: 'coin', src: 'coin.png' }
+          ];
+
+          let loadedCount = 0;
+          
+          await Promise.all(imageList.map(async (item) => {
+              const img = await loadImage(item.src);
+              if (img) {
+                  loadedAssets[item.key] = img;
+              }
+              loadedCount++;
+              setLoadingProgress(10 + Math.floor((loadedCount / imageList.length) * 85));
+          }));
+
+          setAssets(loadedAssets);
+          setLoadingStatus(`載入完成！`);
+          setLoadingProgress(100);
+          
+          setTimeout(() => {
+              setCurrentView('menu'); 
+          }, 400);
       };
-      timerId = setTimeout(pollQueue, 30000); return () => clearTimeout(timerId);
+      
+      initAssets();
   }, []);
 
   const buyUpgrade = (type) => { const currentLevel = parseInt(upgrades[type], 10) || 1; if (currentLevel >= MAX_LEVEL) return; const cost = UPGRADE_COSTS[currentLevel]; if (coins >= cost) { setCoins(c => c - cost); setUpgrades(prev => ({ ...prev, [type]: currentLevel + 1 })); } };
@@ -687,7 +654,7 @@ export default function App() {
         const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed; obs.x += obs.dx || 0; obs.obsFrames = (obs.obsFrames || 0) + 1; if (obs.type === 'ghost_ship') { obs.y += 1.5; obs.x += Math.sin(obs.obsFrames * 0.1) * 2; } else if (obs.type === 'fish') obs.y += 1.0; }
         const customAsset = getTargetAsset(assets, obs.type);
         if (customAsset && obs.type !== 'log' && obs.type !== 'rock') { if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2); ctx.rotate(obs.obsFrames * 0.06); ctx.drawImage(customAsset, -obs.width/2 - 10, -obs.height/2 - 10, obs.width + 20, obs.height + 20); ctx.restore(); } else ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } else {
-            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (obs.obsFrames%10), 0, Math.PI*2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI*2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
+            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (obs.obsFrames%10), 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI * 2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
         }
         if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
         if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
@@ -699,11 +666,10 @@ export default function App() {
     }
     if (!isAnimationPaused) state.frames++; 
     
-    // 🌟 修改：新單字展示防重疊優化
     if (state.wordIntroTimer > 0) {
         state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
-        const ballSpacing = 50; // 🌟 加大間距確保不重疊
+        const ballSpacing = 50; 
         const startX = state.canvasWidth / 2 - (n * ballSpacing) / 2 + (ballSpacing / 2); 
         const centerY = state.canvasHeight / 2 - 50;
         for (let i = 0; i < n; i++) {
