@@ -442,6 +442,20 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isNewRecord, setIsNewRecord] = useState(false);
 
+  // 🌟 新增：教學模式狀態
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [summonCount, setSummonCount] = useState(0);
+  const [sessionCoins, setSessionCoins] = useState(0);
+  const [lives, setLives] = useState(3);
+  const wordBagRef = useRef([]);
+  const [currentWordObj, setCurrentWordObj] = useState(WORD_LIST[0]);
+  const [currentStageIdx, setCurrentStageIdx] = useState(0);
+  const [collectedLetters, setCollectedLetters] = useState([]);
+  const [isFeverTime, setIsFeverTime] = useState(false);
+  const [isHidingWordUI, setIsHidingWordUI] = useState(false); 
+
   useEffect(() => {
       const unlockAudio = () => {
           if (!audio.ctx) { audio.init(); audio.isMuted = false; audio.master.gain.value = 0.1; setIsAudioMuted(false); } 
@@ -500,18 +514,6 @@ export default function App() {
       }
   };
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const [summonCount, setSummonCount] = useState(0);
-  const [sessionCoins, setSessionCoins] = useState(0);
-  const [lives, setLives] = useState(3);
-  const wordBagRef = useRef([]);
-  const [currentWordObj, setCurrentWordObj] = useState(WORD_LIST[0]);
-  const [currentStageIdx, setCurrentStageIdx] = useState(0);
-  const [collectedLetters, setCollectedLetters] = useState([]);
-  const [isFeverTime, setIsFeverTime] = useState(false);
-  const [isHidingWordUI, setIsHidingWordUI] = useState(false); 
-
   const getNextWord = useCallback(() => {
       if (wordBagRef.current.length === 0) wordBagRef.current = [...WORD_LIST].sort(() => Math.random() - 0.5);
       return wordBagRef.current.pop();
@@ -561,12 +563,32 @@ export default function App() {
 
   const buyUpgrade = (type) => { const currentLevel = parseInt(upgrades[type], 10) || 1; if (currentLevel >= MAX_LEVEL) return; const cost = UPGRADE_COSTS[currentLevel]; if (coins >= cost) { setCoins(c => c - cost); setUpgrades(prev => ({ ...prev, [type]: currentLevel + 1 })); } };
 
+  // 🌟 修改：遊戲開始時判斷是否為首次遊玩以顯示教學
   const startGame = () => {
-    const maxLives = 2 + (parseInt(upgrades?.lives, 10) || 1); setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(maxLives); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsNewRecord(false); setIsHidingWordUI(true); 
+    const maxLives = 2 + (parseInt(upgrades?.lives, 10) || 1); setCurrentView('game'); setGameOver(false); setSessionCoins(0); setLives(maxLives); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsNewRecord(false); setIsHidingWordUI(true); 
     const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); const speedMult = window.innerWidth <= 768 ? 0.6 : 1.0;
     gameState.current = {
       ...gameState.current, frames: 0, logicFrames: 0, frameAccumulator: 0, lastTime: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 240, wordIntroTimer: 0, summonTimer: 0, flashTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
     };
+
+    // 檢查是否看過教學 (isJson=true，因為存的是 boolean)
+    const hasSeen = safeGetStorage('hasSeenTutorial_v1', false, true);
+    if (!hasSeen) {
+        setShowTutorial(true);
+        setIsPlaying(false); // 暫停遊戲迴圈
+    } else {
+        setShowTutorial(false);
+        setIsPlaying(true);
+    }
+  };
+
+  // 🌟 新增：關閉教學並啟動遊戲
+  const closeTutorial = (e) => {
+      if (e) e.stopPropagation();
+      safeSetStorage('hasSeenTutorial_v1', true, true);
+      setShowTutorial(false);
+      gameState.current.lastTime = performance.now(); // 重置時間差，避免第一幀瞬間跳躍
+      setIsPlaying(true);
   };
 
   const endGame = useCallback(() => { setIsPlaying(false); setGameOver(true); setCoins(c => c + gameState.current.sessionCoinsRef); audio.setMode('menu'); const finalSummons = gameState.current.completedWordsCount; setMaxSummons(prev => { if (finalSummons > prev) { setIsNewRecord(true); return finalSummons; } return prev; }); }, []);
@@ -990,6 +1012,35 @@ export default function App() {
                       <div className="flex text-red-500 text-[10px] gap-0.5 drop-shadow-md bg-black/40 px-1.5 py-0.5 rounded-full backdrop-blur-sm"> {Array.from({ length: totalLivesCount }).map((_, i) => ( <span key={i} className={i < lives ? 'opacity-100' : 'opacity-30 grayscale'}>❤️</span> ))} </div>
                   </div>
               </div>
+              
+              {/* 🌟 新增：首次遊玩教學浮層 */}
+              {showTutorial && (
+                  <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-50 p-4 text-center animate-fadeIn pointer-events-auto">
+                      <h2 className="text-3xl font-black text-white mb-4 tracking-widest">📜 玩法說明</h2>
+                      <div className="bg-white/10 p-5 rounded-xl border border-white/20 w-full max-w-[90%] mb-6 backdrop-blur-sm text-left flex flex-col gap-4 shadow-2xl">
+                          <div className="flex items-start gap-3">
+                              <div className="text-3xl">🛶</div>
+                              <div><strong className="text-blue-300 text-lg">移動躲避</strong><p className="text-gray-300 text-sm mt-1">左右滑動螢幕拖曳龍舟，或使用鍵盤左右方向鍵。</p></div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                              <div className="text-3xl">🅰️</div>
+                              <div><strong className="text-green-400 text-lg">收集拼字</strong><p className="text-gray-300 text-sm mt-1">撞擊「粽子」來收集字母，依照頂部提示依序拼出單字。</p></div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                              <div className="text-3xl">🐉</div>
+                              <div><strong className="text-yellow-400 text-lg">召喚神龍</strong><p className="text-gray-300 text-sm mt-1">單字拼寫完成將召喚神龍，進入狂掉金幣的「無敵時間」。</p></div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                              <div className="text-3xl">💥</div>
+                              <div><strong className="text-red-400 text-lg">極限閃避</strong><p className="text-gray-300 text-sm mt-1">撞到岩石、漩渦或幽靈船會扣除生命，小心前方的暗夜挑戰！</p></div>
+                          </div>
+                      </div>
+                      <button onClick={closeTutorial} className="w-full max-w-[85%] py-3.5 bg-green-500 hover:bg-green-400 text-white text-xl font-bold rounded-xl shadow-lg transform transition-transform hover:scale-105 animate-pulse">
+                          我知道了，出發！
+                      </button>
+                  </div>
+              )}
+
               {gameOver && (
                   <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-20 p-4 text-center animate-fadeIn pointer-events-auto">
                       <h2 className="text-3xl font-black text-white mb-2 tracking-widest">航行結束</h2>
