@@ -361,6 +361,7 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
         if (boatImg) { 
             const baseW = 280, baseH = 125; let finalScale = targetScale;
             if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
+            if (level === 4 || level === 5) ctx.scale(-1, 1); // 🌟 水平翻轉 Lv4 與 Lv5 的圖片
             ctx.drawImage(boatImg, -(baseW * finalScale) / 2, -(baseH * finalScale) / 2, baseW * finalScale, baseH * finalScale); 
         } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -30 * targetScale, -60 * targetScale, 60 * targetScale, 120 * targetScale, level); }
         ctx.restore();
@@ -401,11 +402,13 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
                 const offCanvas = document.createElement('canvas'); offCanvas.width = canvas.width; offCanvas.height = canvas.height;
                 const oCtx = offCanvas.getContext('2d');
                 oCtx.translate(canvas.width/2, canvas.height/2);
+                if (level === 4 || level === 5) oCtx.scale(-1, 1); // 🌟 水平翻轉 Lv4 與 Lv5 的圖片
                 oCtx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
                 oCtx.globalCompositeOperation = 'source-in';
                 oCtx.fillStyle = '#000000'; oCtx.fillRect(-canvas.width, -canvas.height, canvas.width*2, canvas.height*2);
                 ctx.drawImage(offCanvas, -canvas.width/2, -canvas.height/2);
             } else {
+                if (level === 4 || level === 5) ctx.scale(-1, 1); // 🌟 水平翻轉 Lv4 與 Lv5 的圖片
                 ctx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
             }
         } else {
@@ -646,12 +649,12 @@ export default function App() {
         if (progress < 0.7) { // 側邊展示時間加長 (0.7)
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.7) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
             ctx.scale(2, 2); // 🌟 放大 200%
-            if (sideImg) { const baseW = 140, baseH = 80; ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
+            if (sideImg) { const baseW = 140, baseH = 80; if (currentLvl === 4 || currentLvl === 5) ctx.scale(-1, 1); ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
         } else {
             const p2 = (progress - 0.7) / 0.3; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
             const topImg = getTargetAsset(assets, `boat${currentLvl}_top`);
-            if (topImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(topImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
+            if (topImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); if (currentLvl === 4 || currentLvl === 5) ctx.scale(-1, 1); const baseS = 90; ctx.drawImage(topImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
         }
         if (prevIntro > 0 && state.introTimer <= 0) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
     }
@@ -661,7 +664,7 @@ export default function App() {
     
     if (!state.player.isInvincible || Math.floor(state.player.invincibleTimer / 5) % 2 === 0) {
         const boatImg = getTargetAsset(assets, `boat${currentLvl}_top`);
-        if (boatImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(boatImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
+        if (boatImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); if (currentLvl === 4 || currentLvl === 5) ctx.scale(-1, 1); const baseS = 90; ctx.drawImage(boatImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
     }
     
     if (state.currentStage === 3 && !isFeverTime && !isAnimationPaused) {
@@ -765,38 +768,57 @@ export default function App() {
             const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
-        
+
+        // 🌟 新增：組合字多排顯示邏輯
+        const rows = [];
+        if (!isGreat || currentWordObj.stages.length === 1) {
+            rows.push({ chars: targetWord.split(''), isPrev: false });
+        } else {
+            for (let s = 0; s <= currentStageIdx; s++) {
+                rows.push({ chars: currentWordObj.stages[s].word.split(''), isPrev: s < currentStageIdx });
+            }
+        }
+        const numRows = rows.length;
+        const rowSpacingY = 50; 
+        const beamBottomY = cy + ((numRows - 1) / 2) * rowSpacingY; // 光束延伸至最底下一排
+
         if (t <= 140 && t > 0) {
             const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy); 
+            const bw = isGreat ? (numRows > 1 ? 180 : 160) : 120; // 組合字光束稍寬
+            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamBottomY); // 🌟 精準打到最下排龍珠
             ctx.restore();
         }
         
-        let allChars = []; let uis = [];
-        if (!isGreat || currentWordObj.stages.length === 1) {
-            const n = targetWord.length;
-            for (let i = 0; i < n; i++) { allChars.push(targetWord[i]); uis.push({x: state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, y: 30}); }
-        } else {
-            let prevWord = ""; for (let s = 0; s < currentStageIdx; s++) prevWord += currentWordObj.stages[s].word;
-            const n1 = prevWord.length; for(let i = 0; i < n1; i++) { allChars.push(prevWord[i]); uis.push(null); }
-            const n2 = targetWord.length; for(let i = 0; i < n2; i++) { allChars.push(targetWord[i]); uis.push({x: state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, y: 30}); }
-        }
-        
-        const totalChars = allChars.length; 
         const maxAllowedWidth = state.canvasWidth - 40; 
-        const idealDia = 40; 
-        const activeDia = Math.min(idealDia, maxAllowedWidth / totalChars); 
-        const activeRadius = activeDia / 2;
-        const startX = cx - ((totalChars * activeDia) / 2) + activeRadius; 
+        const idealDia = 46; // 稍微放大基準龍珠尺寸
         
-        for(let i=0; i<totalChars; i++) {
-            const ui = uis[i]; const tx = startX + i * activeDia; const ty = cy; let x = tx, y = ty; let alpha = 1;
-            if (!ui) { if (t > 200) alpha = (260 - t) / 60; } else { if (t > 200) { const p = (260 - t) / 60; x = ui.x + p * (tx - ui.x); y = ui.y + p * (ty - ui.y); } }
-            
-            // 🌟 修改點：龍珠與光束同步消失 (t <= 30 時淡出)
-            if (t <= 30) { alpha *= Math.max(0, t / 30); }
-            ctx.save(); ctx.globalAlpha = alpha; drawDragonBall(ctx, x, y, activeRadius, allChars[i], true, false, ritualGlow); ctx.restore();
+        for (let r = 0; r < numRows; r++) {
+            const rowChars = rows[r].chars;
+            const isPrev = rows[r].isPrev;
+            const n = rowChars.length;
+            const activeDia = Math.min(idealDia, maxAllowedWidth / n); 
+            const activeRadius = activeDia / 2;
+            const startX = cx - ((n * activeDia) / 2) + activeRadius; 
+            const rowY = cy + (r - (numRows - 1) / 2) * rowSpacingY; // 每排的 Y 座標
+
+            for (let i = 0; i < n; i++) {
+                const ui = isPrev ? null : {x: state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, y: 30}; 
+                const tx = startX + i * activeDia; 
+                const ty = rowY; 
+                let x = tx, y = ty; 
+                let alpha = 1;
+                
+                if (!ui) { 
+                    if (t > 200) alpha = (260 - t) / 60; 
+                } else { 
+                    if (t > 200) { const p = (260 - t) / 60; x = ui.x + p * (tx - ui.x); y = ui.y + p * (ty - ui.y); } 
+                }
+                
+                // 🌟 龍珠與光束同步消失
+                if (t <= 30) { alpha *= Math.max(0, t / 30); }
+                ctx.save(); ctx.globalAlpha = alpha; drawDragonBall(ctx, x, y, activeRadius, rowChars[i], true, false, ritualGlow); ctx.restore();
+            }
         }
 
         if (t <= 110) {
