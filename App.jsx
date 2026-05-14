@@ -3,13 +3,12 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// ==========================================
-// ☁️ 專屬雲端資料庫設定 (Vercel 跨設備同步用)
-// ==========================================
-// 如果你想在 Vercel 網站上跨手機/電腦同步紀錄，
-// 請去 Google Firebase 免費建立專案，並將憑證填入這裡：
+// 🌟 初始化雲端環境 (支援 Canvas 預覽與 Vercel 部署雙棲模式)
+let app, auth, db;
+let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
+// 如果你在 Vercel 上，請將 Firebase 的 Config 貼在這裡的 myFirebaseConfig
 const myFirebaseConfig = {
-  apiKey: "AIzaSyCCZdo93p0cEPDC_ZRxZrlW_jscpdDv4LQ",
+  apiKey: "AIzaSyDBGDINEB6yrmO9kn33rFfvCvwv6ToYkjc",
   authDomain: "project-4337058023593134662.firebaseapp.com",
   projectId: "project-4337058023593134662",
   storageBucket: "project-4337058023593134662.firebasestorage.app",
@@ -17,37 +16,22 @@ const myFirebaseConfig = {
   appId: "1:229355651540:web:f2184f7c37875132e55641"
 };
 
-// 🌟 初始化雲端環境
-let app, auth, db;
-let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
 try {
     if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        // AI 預覽環境：使用內建資料庫
         const firebaseConfig = JSON.parse(__firebase_config);
         app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-    } else if (myFirebaseConfig.apiKey !== "填入你的apiKey") {
-        // Vercel 部署環境：如果你填寫了憑證，就連線到你的專屬資料庫！
-        app = initializeApp(myFirebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
     } else {
-        console.warn("未設定雲端資料庫，降級使用本機瀏覽器暫存 (無法跨設備同步)。");
+        app = initializeApp(myFirebaseConfig);
     }
+    auth = getAuth(app);
+    db = getFirestore(app);
 } catch (error) {
     console.warn("Cloud config error, falling back to local storage.");
 }
 
-// ==========================================
-// 🔄 圖片方向控制開關
-// ==========================================
-// 🌟 翻轉設定：填入需要「水平翻轉」的船隻等級數字。
+// 🌟 翻轉設定：船 4 和 5 朝左，需要水平翻轉。
 const FLIP_SIDE_BOATS = [4, 5];
 
-// ==========================================
-// 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
-// ==========================================
 class SynthEngine {
     constructor() {
         this.ctx = null;
@@ -104,96 +88,24 @@ class SynthEngine {
         osc.start(time); osc.stop(time + 0.3);
     }
 
-    playGuzheng(freq, time) {
-        if (this.isMuted || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle'; 
-        osc.frequency.value = freq;
-        osc.connect(gain); gain.connect(this.master);
-        gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(0.6, time + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.001, time + 1.5);
-        osc.start(time); osc.stop(time + 1.5);
-    }
-
-    playWoodblock(time) {
-        if (this.isMuted || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine'; 
-        osc.frequency.setValueAtTime(900, time);
-        osc.frequency.exponentialRampToValueAtTime(300, time + 0.05); 
-        osc.connect(gain); gain.connect(this.master);
-        gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(0.5, time + 0.005);
-        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-        osc.start(time); osc.stop(time + 0.1);
-    }
-
-    sfxCoin() {
-        this.playTone(987.77, 'square', 0.1, 0.3); 
-        setTimeout(() => this.playTone(1318.51, 'square', 0.2, 0.3), 80); 
-    }
-    sfxLetter(progress) {
-        const baseFreq = 440 + (progress * 200); 
-        this.playTone(baseFreq, 'sine', 0.1, 0.6);
-        setTimeout(() => this.playTone(baseFreq * 1.25, 'sine', 0.2, 0.6), 100);
-    }
-    sfxHit() {
-        this.playDrum(this.ctx ? this.ctx.currentTime : 0, true);
-        this.playTone(50, 'sawtooth', 0.4, 0.8);
-    }
+    sfxCoin() { this.playTone(987.77, 'square', 0.1, 0.3); setTimeout(() => this.playTone(1318.51, 'square', 0.2, 0.3), 80); }
+    sfxLetter(progress) { const baseFreq = 440 + (progress * 200); this.playTone(baseFreq, 'sine', 0.1, 0.6); setTimeout(() => this.playTone(baseFreq * 1.25, 'sine', 0.2, 0.6), 100); }
+    sfxHit() { this.playDrum(this.ctx ? this.ctx.currentTime : 0, true); this.playTone(50, 'sawtooth', 0.4, 0.8); }
     
     sfxRoar() {
         if (this.isMuted || !this.ctx) return;
-        const dur = 3.5; 
-        const t = this.ctx.currentTime;
-        const shimmer = this.ctx.createOscillator();
-        shimmer.type = 'sine';
-        shimmer.frequency.setValueAtTime(440, t);
-        shimmer.frequency.exponentialRampToValueAtTime(880, t + dur); 
-        const shimmerGain = this.ctx.createGain();
-        shimmerGain.gain.setValueAtTime(0, t);
-        shimmerGain.gain.linearRampToValueAtTime(0.2, t + 0.8); 
-        shimmerGain.gain.exponentialRampToValueAtTime(0.01, t + dur);
-        shimmer.connect(shimmerGain); shimmerGain.connect(this.master);
-        shimmer.start(t); shimmer.stop(t + dur);
-
+        const dur = 3.5; const t = this.ctx.currentTime;
         const baseFreq = 261.63;
-        const intervals = [1, 1.25, 1.5, 2]; 
-        intervals.forEach((interval, index) => {
+        [1, 1.25, 1.5, 2].forEach(interval => {
             const f = baseFreq * interval;
             const osc = this.ctx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(f, t);
-            osc.frequency.exponentialRampToValueAtTime(f * 2.2, t + 0.6); 
-            osc.frequency.exponentialRampToValueAtTime(f * 2.5, t + dur); 
-            const filter = this.ctx.createBiquadFilter();
-            filter.type = 'lowpass'; filter.Q.value = 10;
-            filter.frequency.setValueAtTime(400, t);
-            filter.frequency.exponentialRampToValueAtTime(4000, t + 0.5);
             const gain = this.ctx.createGain();
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.25, t + 0.4);
-            gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
-            osc.connect(filter); filter.connect(gain); gain.connect(this.master);
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(f, t);
+            osc.frequency.exponentialRampToValueAtTime(f * 2.5, t + dur);
+            gain.gain.setValueAtTime(0.15, t); gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+            osc.connect(gain); gain.connect(this.master);
             osc.start(t); osc.stop(t + dur);
         });
-        const bufferSize = this.ctx.sampleRate * 2.0;
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = buffer;
-        const noiseFilter = this.ctx.createBiquadFilter();
-        noiseFilter.type = 'highpass'; noiseFilter.frequency.setValueAtTime(1000, t);
-        const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(0, t);
-        noiseGain.gain.linearRampToValueAtTime(0.15, t + 0.5);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 2.0);
-        noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(this.master);
-        noise.start(t);
     }
 
     scheduler() {
@@ -201,8 +113,7 @@ class SynthEngine {
         while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
             this.playStep(this.nextNoteTime);
             const tempo = this.mode === 'fever' ? 180 : (this.mode === 'game' ? 140 : 160);
-            const secondsPerBeat = 60.0 / tempo;
-            this.nextNoteTime += secondsPerBeat / 2; 
+            this.nextNoteTime += (60.0 / tempo) / 2; 
             this.step = (this.step + 1) % 32; 
         }
         this.timerID = setTimeout(() => this.scheduler(), 25);
@@ -210,46 +121,24 @@ class SynthEngine {
 
     playStep(time) {
         if (this.isMuted || this.mode === 'stopped') return;
-        if (this.mode === 'menu' || this.mode === 'shop') {
-            const DO = 523.25, RE = 587.33, MI = 659.25, SOL = 783.99, LA = 880.00;
-            const menuMelody = [MI, 0, MI, SOL, MI, 0, RE, 0, DO, 0, DO, RE, MI, 0, 0, 0, SOL, 0, SOL, LA, SOL, 0, MI, 0, RE, 0, MI, RE, DO, 0, 0, 0];
-            const note = menuMelody[this.step];
-            if (note !== 0) this.playGuzheng(note, time); 
-            if (this.step % 4 === 0) this.playWoodblock(time);
-            if (this.step % 8 === 0) this.playDrum(time, true); 
-            else if (this.step % 8 === 4) this.playDrum(time, false); 
-        } else if (this.mode === 'game') {
-            if (this.step % 8 === 0 || this.step % 8 === 3) this.playDrum(time, this.step % 8 === 0);
-            if (this.step % 8 === 4) this.playWoodblock(time); 
-        } else if (this.mode === 'fever') {
-            if (this.step % 4 === 0 || this.step % 4 === 2) this.playDrum(time, true);
-            const arp = [523.25, 659.25, 783.99, 1046.50]; 
-            const freq = arp[this.step % 4];
-            this.playGuzheng(freq, time); 
-        }
+        if (this.step % 8 === 0) this.playDrum(time, true);
     }
 }
 const audio = new SynthEngine();
 
-// --- 🌟 語音合成引擎 ---
 const speakWord = (word) => {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
-        const textToSpeak = word.toLowerCase();
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
-        utterance.lang = 'en-US'; utterance.rate = 0.65; utterance.pitch = 1.0; 
-        const voices = window.speechSynthesis.getVoices();
-        const deepVoice = voices.find(v => (v.name.includes('Male') || v.name.includes('David') || v.name.includes('UK')) && !v.name.includes('Female'));
-        if (deepVoice) utterance.voice = deepVoice;
+        const utterance = new SpeechSynthesisUtterance(word.toLowerCase());
+        utterance.lang = 'en-US'; utterance.rate = 0.65;
         window.speechSynthesis.speak(utterance);
     }
 };
 
-// --- 關卡與詞庫設定 ---
 const STAGE_CONFIG = {
-    1: { name: "寧靜水鄉", desc: "新手村：靜止障礙", water: '#bae0ff', bank: '#95de64', line: '#91caff', speed: 4.0, obsRate: 90 },
-    2: { name: "午後激流", desc: "進階：躍魚與漩渦", water: '#ffd8bf', bank: '#ffa940', line: '#ff9c6e', speed: 4.5, obsRate: 70 },
-    3: { name: "奇幻夜航", desc: "極限：黑夜與幽靈船", water: '#002766', bank: '#001529', line: '#096dd9', speed: 5.0, obsRate: 50 }
+    1: { name: "寧靜水鄉", water: '#bae0ff', bank: '#95de64', line: '#91caff', speed: 4.0, obsRate: 90 },
+    2: { name: "午後激流", water: '#ffd8bf', bank: '#ffa940', line: '#ff9c6e', speed: 4.5, obsRate: 70 },
+    3: { name: "奇幻夜航", water: '#002766', bank: '#001529', line: '#096dd9', speed: 5.0, obsRate: 50 }
 };
 
 const WORD_LIST = [
@@ -257,31 +146,18 @@ const WORD_LIST = [
   { fullWord: 'DRAGON BOAT', fullMeaning: '龍舟', stages: [{ word: 'DRAGON', meaning: '龍' }, { word: 'BOAT', meaning: '船' }] },
   { fullWord: 'SACHET', fullMeaning: '香包', stages: [{ word: 'SACHET', meaning: '香包' }] },
   { fullWord: 'RICE DUMPLING', fullMeaning: '粽子', stages: [{ word: 'RICE', meaning: '米' }, { word: 'DUMPLING', meaning: '糰子' }] },
-  { fullWord: 'DRUM', fullMeaning: '鼓', stages: [{ word: 'DRUM', meaning: '鼓' }] },
-  { fullWord: 'RIVER', fullMeaning: '河流', stages: [{ word: 'RIVER', meaning: '河流' }] },
   { fullWord: 'STICKY RICE', fullMeaning: '糯米', stages: [{ word: 'STICKY', meaning: '黏的' }, { word: 'RICE', meaning: '米' }] },
-  { fullWord: 'RACE', fullMeaning: '競賽', stages: [{ word: 'RACE', meaning: '競賽' }] },
-  { fullWord: 'CULTURE', fullMeaning: '文化', stages: [{ word: 'CULTURE', meaning: '文化' }] },
-  { fullWord: 'HERB', fullMeaning: '艾草', stages: [{ word: 'HERB', meaning: '艾草' }] },
-  { fullWord: 'PADDLE', fullMeaning: '船槳', stages: [{ word: 'PADDLE', meaning: '船槳' }] },
   { fullWord: 'BAMBOO', fullMeaning: '竹子', stages: [{ word: 'BAMBOO', meaning: '竹子' }] }
 ];
 
 const UPGRADE_COSTS = [0, 100, 300, 600, 1000, 1500];
 const MAX_LEVEL = 5;
 
-// ==========================================
-// 🖼️ 靜態圖檔載入系統
-// ==========================================
 const loadImage = (srcUrl) => {
     return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous"; 
+        const img = new Image(); img.crossOrigin = "Anonymous";
         img.onload = () => resolve(img);
-        img.onerror = () => {
-            console.warn(`[載入警告] 找不到圖片: ${srcUrl}，將使用備用幾何圖形。`);
-            resolve(null);
-        };
+        img.onerror = () => resolve(null);
         const githubBaseUrl = "https://raw.githubusercontent.com/yao8278-create/dragon-boat-game/main/";
         img.src = githubBaseUrl + srcUrl; 
     });
@@ -303,59 +179,24 @@ const safeSetStorage = (key, val, isJson = false) => {
 const drawDragonBall = (ctx, x, y, radius, char, isGlowing, isStone = false, extraGlow = 0) => {
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
     if (isStone) {
-        ctx.fillStyle = '#8c8c8c'; ctx.fill(); ctx.strokeStyle = '#595959'; ctx.lineWidth = Math.max(1, radius*0.1); ctx.stroke();
-        const grad = ctx.createRadialGradient(x - radius*0.3, y - radius*0.3, radius*0.1, x, y, radius);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); grad.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
-        ctx.fillStyle = grad; ctx.fill(); ctx.fillStyle = '#434343'; 
+        ctx.fillStyle = '#8c8c8c'; ctx.fill(); ctx.strokeStyle = '#595959'; ctx.lineWidth = 2; ctx.stroke();
     } else {
         if (isGlowing) { ctx.shadowBlur = radius * (1.5 + extraGlow); ctx.shadowColor = '#faad14'; }
         const grad = ctx.createRadialGradient(x - radius*0.3, y - radius*0.3, radius*0.1, x, y, radius);
-        grad.addColorStop(0, '#ffec3d'); grad.addColorStop(0.5, '#fa8c16'); grad.addColorStop(1, '#ad2102');
-        ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = '#ffe58f'; ctx.lineWidth = Math.max(1, radius*0.05); ctx.stroke();
-        ctx.fillStyle = '#820014'; 
+        grad.addColorStop(0, '#ffec3d'); grad.addColorStop(1, '#ad2102'); ctx.fillStyle = grad; ctx.fill();
+        ctx.strokeStyle = '#ffe58f'; ctx.stroke();
     }
+    ctx.fillStyle = isStone ? '#434343' : '#820014';
     ctx.font = `900 ${radius * 1.1}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(char, x, y + radius*0.05); ctx.restore();
+    ctx.fillText(char, x, y); ctx.restore();
 };
 
-const drawGeometricBoat = (ctx, x, y, width, height, levelInput) => {
-    const level = parseInt(levelInput, 10) || 1; ctx.save(); ctx.translate(x, y);
-    if (level <= 1) {
-        ctx.fillStyle = '#613400'; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(30, 0); ctx.lineTo(35, height/2); ctx.lineTo(30, height); ctx.lineTo(10, height); ctx.lineTo(5, height/2); ctx.fill();
-        ctx.strokeStyle = '#3b1c00'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#874d00'; ctx.fillRect(0, 30, 40, 4);
-    } else if (level === 2) {
-        ctx.fillStyle = '#cf1322'; ctx.beginPath(); ctx.moveTo(width/2, -10); ctx.lineTo(width-5, 20); ctx.lineTo(width-5, height-10); ctx.lineTo(width/2, height+10); ctx.lineTo(5, height-10); ctx.lineTo(5, 20); ctx.fill();
-        ctx.strokeStyle = '#fadb14'; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = '#fadb14'; ctx.fillRect(10, -15, 20, 15); ctx.fillStyle = '#f5222d'; ctx.fillRect(12, -10, 4, 4); ctx.fillRect(24, -10, 4, 4);
-        ctx.fillStyle = '#096dd9'; ctx.beginPath(); ctx.moveTo(width/2, height-20); ctx.lineTo(width/2+15, height-15); ctx.lineTo(width/2, height-10); ctx.fill();
-    } else if (level === 3) {
-        ctx.fillStyle = '#d4b106'; ctx.fillRect(-5, 20, 10, 40); ctx.fillRect(width-5, 20, 10, 40);
-        ctx.fillStyle = '#a8071a'; ctx.beginPath(); ctx.moveTo(width/2, -15); ctx.lineTo(width, 20); ctx.lineTo(width-2, height); ctx.lineTo(width/2, height+15); ctx.lineTo(2, height); ctx.lineTo(0, 20); ctx.fill();
-        ctx.strokeStyle = '#faad14'; ctx.lineWidth = 2; ctx.stroke(); ctx.strokeStyle = '#faad14'; for(let i=10; i<height-10; i+=10) { ctx.beginPath(); ctx.moveTo(10, i); ctx.lineTo(width/2, i+5); ctx.lineTo(width-10, i); ctx.stroke(); }
-        ctx.fillStyle = '#faad14'; ctx.fillRect(5, -20, 30, 20); ctx.fillStyle = '#873800'; ctx.fillRect(8, -30, 4, 10); ctx.fillRect(28, -30, 4, 10);
-        ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(5, height-20); ctx.lineTo(-10, height-15); ctx.lineTo(5, height-10); ctx.fill(); ctx.beginPath(); ctx.moveTo(width-5, height-20); ctx.lineTo(width+10, height-15); ctx.lineTo(width-5, height-10); ctx.fill();
-    } else if (level === 4) {
-        ctx.shadowBlur = 10; ctx.shadowColor = '#52c41a'; ctx.fillStyle = '#135200'; ctx.beginPath(); ctx.moveTo(width/2, -20); ctx.lineTo(width+10, 30); ctx.lineTo(width+5, height+10); ctx.lineTo(width/2, height+25); ctx.lineTo(-5, height+10); ctx.lineTo(-10, 30); ctx.fill();
-        ctx.strokeStyle = '#fadb14'; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#52c41a'; ctx.fillRect(5, 20, width-10, height-20); ctx.fillStyle = '#fadb14'; ctx.beginPath(); ctx.arc(width/2, -15, 20, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#f5222d'; ctx.fillRect(width/2-10, -25, 6, 6); ctx.fillRect(width/2+4, -25, 6, 6); ctx.fillStyle = '#faad14'; ctx.fillRect(width/2-25, -15, 50, 10); 
-        ctx.fillStyle = '#f5222d'; [-10, width].forEach(x => { [height-30, height-10].forEach(y => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x+(x<0?-15:15), y+5); ctx.lineTo(x, y+10); ctx.fill(); }); });
-    } else {
-        ctx.shadowBlur = 25; ctx.shadowColor = '#00e5ff'; ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
-        ctx.beginPath(); ctx.moveTo(0, 30); ctx.lineTo(-40, 10); ctx.lineTo(-20, 60); ctx.lineTo(0, height-10); ctx.fill(); ctx.beginPath(); ctx.moveTo(width, 30); ctx.lineTo(width+40, 10); ctx.lineTo(width+20, 60); ctx.lineTo(width, height-10); ctx.fill(); 
-        ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.moveTo(width/2, -30); ctx.lineTo(width+15, 30); ctx.lineTo(width+5, height+20); ctx.lineTo(width/2, height+40); ctx.lineTo(-5, height+20); ctx.lineTo(-15, 30); ctx.fill();
-        ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4; ctx.stroke(); ctx.fillStyle = '#096dd9'; ctx.fillRect(10, 20, width-20, height-10); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(width/2, height/2, 8, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#faad14'; ctx.beginPath(); ctx.moveTo(width/2, -40); ctx.lineTo(width/2+25, -10); ctx.lineTo(width/2-25, -10); ctx.fill(); ctx.fillStyle = '#ff4d4f'; ctx.beginPath(); ctx.arc(width/2-10, -20, 4, 0, Math.PI*2); ctx.arc(width/2+10, -20, 4, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#f5222d'; ctx.beginPath(); ctx.moveTo(0, height); ctx.lineTo(-30, height-40); ctx.lineTo(-10, height-30); ctx.fill(); ctx.beginPath(); ctx.moveTo(width, height); ctx.lineTo(width+30, height-40); ctx.lineTo(width+10, height-30); ctx.fill();
-    }
+const drawGeometricBoat = (ctx, x, y, width, height, level) => {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = level > 1 ? '#cf1322' : '#613400';
+    ctx.beginPath(); ctx.moveTo(width/2, -10); ctx.lineTo(width, 20); ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.lineTo(0, 20); ctx.fill();
     ctx.restore();
 };
-
-const drawGeometricDragon = (ctx) => {
-    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f5222d'; ctx.fillRect(-25, -10, 15, 5); ctx.fillRect(10, -10, 15, 5);
-};
-
-const getTargetAsset = (assets, name) => (!assets || Object.keys(assets).length === 0) ? null : assets[name];
-const getBoatScale = (level) => ({ 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5 }[Math.min(level, 5)] || 1.0);
 
 const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
     const previewCanvasRef = useRef(null);
@@ -363,77 +204,54 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
         const canvas = previewCanvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#bae0ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const boatImg = getTargetAsset(assets, `boat${Math.min(level, 5)}_side`);
+        const boatImg = getTargetAsset(assets, `boat${level}_side`);
         const targetScale = getBoatScale(level); 
         ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2);
         if (boatImg) { 
-            const baseW = 280, baseH = 125; let finalScale = targetScale;
-            if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
-            
+            const baseW = 280, baseH = 140; 
             if (FLIP_SIDE_BOATS.includes(level)) ctx.scale(-1, 1); 
-            ctx.drawImage(boatImg, -(baseW * finalScale) / 2, -(baseH * finalScale) / 2, baseW * finalScale, baseH * finalScale); 
-        } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -30 * targetScale, -60 * targetScale, 60 * targetScale, 120 * targetScale, level); }
+            ctx.drawImage(boatImg, -(baseW * targetScale) / 4, -(baseH * targetScale) / 4, (baseW * targetScale)/2, (baseH * targetScale)/2); 
+        } else { ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -15, -30, 30, 60, level); }
         ctx.restore();
     }, [level, assets]);
     return (
-        <div className="flex flex-col items-center w-full cursor-pointer transform transition-transform hover:scale-105" onClick={() => onClick && onClick(level)}>
-            <div className="relative w-full max-w-[320px]">
-                <canvas ref={previewCanvasRef} width={320} height={140} className={`rounded-lg border-2 border-blue-300 shadow-inner block bg-blue-100 w-full h-auto transition-all ${isLocked ? 'blur-md grayscale brightness-50' : ''}`} />
-                {isLocked && <div className="absolute inset-0 flex items-center justify-center text-white text-4xl drop-shadow-lg font-black">🔒</div>}
+        <div className="flex flex-col items-center w-full cursor-pointer" onClick={() => onClick && onClick(level)}>
+            <div className="relative w-full max-w-[150px]">
+                <canvas ref={previewCanvasRef} width={150} height={100} className={`rounded-lg border-2 border-blue-300 ${isLocked ? 'blur-sm grayscale brightness-50' : ''}`} />
+                {isLocked && <div className="absolute inset-0 flex items-center justify-center text-2xl">🔒</div>}
             </div>
-            <span className={`text-xs mt-2 font-bold px-2 py-1 rounded-full ${isNext ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
-                {isNext ? `Lv.${level} (預覽)` : `Lv.${level} (目前)`}
-            </span>
-            <span className="text-[10px] text-blue-500 mt-1 font-bold">🔍 點擊放大</span>
+            <span className="text-xs mt-1 font-bold">{isNext ? '下一階' : '目前'} Lv.{level}</span>
         </div>
     );
 };
+
+const getTargetAsset = (assets, name) => assets[name] || null;
+const getBoatScale = (level) => ({ 1: 0.9, 2: 1.05, 3: 1.2, 4: 1.35, 5: 1.5 }[level] || 1.0);
 
 const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
     const canvasRef = useRef(null);
     useEffect(() => {
         const canvas = canvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const gradient = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 10, canvas.width/2, canvas.height/2, canvas.width);
-        gradient.addColorStop(0, '#e6f7ff'); gradient.addColorStop(1, isLocked ? '#262626' : '#bae0ff'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const boatImg = getTargetAsset(assets, `boat${Math.min(level, 5)}_${viewType}`);
-        const targetScale = getBoatScale(level); ctx.save(); ctx.translate(canvas.width/2, canvas.height/2);
-        
+        ctx.fillStyle = isLocked ? '#262626' : '#bae0ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const boatImg = getTargetAsset(assets, `boat${level}_${viewType}`);
+        const targetScale = getBoatScale(level) * 1.5;
+        ctx.save(); ctx.translate(canvas.width/2, canvas.height/2);
         if (boatImg) {
-            let finalScale = targetScale;
-            const isSide = viewType === 'side';
-            const baseW = isSide ? 320 : 160, baseH = isSide ? 145 : 160;
-            if (baseW * finalScale > canvas.width - 20) finalScale = (canvas.width - 20) / baseW;
-            
+            const baseW = viewType === 'side' ? 280 : 80, baseH = viewType === 'side' ? 140 : 140;
             if (isLocked) {
-                ctx.shadowBlur = 40; ctx.shadowColor = '#00e5ff';
-                ctx.globalCompositeOperation = 'source-over';
-                const offCanvas = document.createElement('canvas'); offCanvas.width = canvas.width; offCanvas.height = canvas.height;
-                const oCtx = offCanvas.getContext('2d');
-                oCtx.translate(canvas.width/2, canvas.height/2);
-                
-                if (FLIP_SIDE_BOATS.includes(level) && isSide) oCtx.scale(-1, 1); 
-                oCtx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
-                
-                oCtx.globalCompositeOperation = 'source-in';
-                oCtx.fillStyle = '#000000'; oCtx.fillRect(-canvas.width, -canvas.height, canvas.width*2, canvas.height*2);
-                ctx.drawImage(offCanvas, -canvas.width/2, -canvas.height/2);
+                ctx.globalAlpha = 0.2; ctx.filter = 'brightness(0) invert(1)';
+                if (FLIP_SIDE_BOATS.includes(level) && viewType === 'side') ctx.scale(-1, 1);
+                ctx.drawImage(boatImg, -(baseW * targetScale)/2.5, -(baseH * targetScale)/2.5, (baseW * targetScale)/1.2, (baseH * targetScale)/1.2);
             } else {
-                if (FLIP_SIDE_BOATS.includes(level) && isSide) ctx.scale(-1, 1); 
-                ctx.drawImage(boatImg, -(baseW * finalScale)/2, -(baseH * finalScale)/2, baseW * finalScale, baseH * finalScale);
+                if (FLIP_SIDE_BOATS.includes(level) && viewType === 'side') ctx.scale(-1, 1);
+                ctx.drawImage(boatImg, -(baseW * targetScale)/2.5, -(baseH * targetScale)/2.5, (baseW * targetScale)/1.2, (baseH * targetScale)/1.2);
             }
-        } else {
-            if (isLocked) ctx.globalAlpha = 0.3;
-            if (viewType === 'side') ctx.rotate(Math.PI / 2); drawGeometricBoat(ctx, -50 * targetScale, -100 * targetScale, 100 * targetScale, 200 * targetScale, level);
         }
         ctx.restore();
-        
-        if (isLocked) {
-            ctx.fillStyle = "white"; ctx.font = "bold 80px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText("?", canvas.width/2, canvas.height/2);
-        }
+        if (isLocked) { ctx.fillStyle = "white"; ctx.font = "bold 60px sans-serif"; ctx.textAlign = "center"; ctx.fillText("?", canvas.width/2, canvas.height/2 + 20); }
     }, [level, assets, viewType, isLocked]);
-    return <canvas ref={canvasRef} width={viewType === 'side' ? 360 : 220} height={viewType === 'side' ? 200 : 220} className="rounded-xl border-4 border-white shadow-2xl block max-w-full h-auto" />;
+    return <canvas ref={canvasRef} width={300} height={200} className="rounded-xl border-4 border-white shadow-2xl block mb-4" />;
 };
 
 export default function App() {
@@ -468,17 +286,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+      if (!auth) { setIsDataLoaded(true); return; }
       const initAuth = async () => {
           try {
               if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
               else await signInAnonymously(auth);
           } catch (e) { }
       };
-      if (auth) initAuth();
-      if (auth) {
-          const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); });
-          return () => unsubscribe();
-      }
+      initAuth();
+      const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); });
+      return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -490,15 +307,11 @@ export default function App() {
               if (data.coins !== undefined) setCoins(data.coins);
               if (data.upgrades !== undefined) setUpgrades(data.upgrades);
               if (data.maxSummons !== undefined) setMaxSummons(data.maxSummons);
-          } else {
-              setCoins(0);
-              setUpgrades({ lives: 1, fever: 1 });
-              setMaxSummons(0);
-          }
+          } else { setCoins(0); setUpgrades({ lives: 1, fever: 1 }); setMaxSummons(0); }
           setIsDataLoaded(true); 
-      }, (error) => { console.warn(error); setIsDataLoaded(true); });
+      }, (error) => { setIsDataLoaded(true); });
       return () => unsubscribe();
-  }, [user, db, playerName]);
+  }, [user, playerName]);
 
   useEffect(() => {
       if (!isDataLoaded || !playerName) return; 
@@ -509,28 +322,17 @@ export default function App() {
                   await setDoc(userRef, { coins, upgrades, maxSummons }, { merge: true }); 
               } catch(e) {}
           } else {
-              safeSetStorage(`db_coins_${playerName}`, coins, false); 
-              safeSetStorage(`db_upgrades_${playerName}`, upgrades, true); 
-              safeSetStorage(`db_max_summons_${playerName}`, maxSummons, false);
+              safeSetStorage(`db_coins_${playerName}`, coins, false); safeSetStorage(`db_upgrades_${playerName}`, upgrades, true); safeSetStorage(`db_max_summons_${playerName}`, maxSummons, false);
           }
       };
       saveData();
-  }, [coins, upgrades, maxSummons, isDataLoaded, user, db, playerName]);
+  }, [coins, upgrades, maxSummons, isDataLoaded, playerName, user]);
 
   const handleLogin = (name) => {
       const trimmed = name.trim().replace(/[\/\\]/g, '_');
       if (!trimmed) return;
-      
-      setIsDataLoaded(false); 
-      setPlayerName(trimmed);
-      safeSetStorage('last_login_name', trimmed, false);
-      
-      if (!db) {
-          setCoins(safeGetStorage(`db_coins_${trimmed}`, 0, false));
-          setUpgrades(safeGetStorage(`db_upgrades_${trimmed}`, { lives: 1, fever: 1 }, true));
-          setMaxSummons(safeGetStorage(`db_max_summons_${trimmed}`, 0, false));
-          setIsDataLoaded(true);
-      }
+      setIsDataLoaded(false); setPlayerName(trimmed); safeSetStorage('last_login_name', trimmed, false);
+      if (!db) { setCoins(safeGetStorage(`db_coins_${trimmed}`, 0, false)); setUpgrades(safeGetStorage(`db_upgrades_${trimmed}`, { lives: 1, fever: 1 }, true)); setMaxSummons(safeGetStorage(`db_max_summons_${trimmed}`, 0, false)); setIsDataLoaded(true); }
       setCurrentView('menu');
   };
 
@@ -545,512 +347,209 @@ export default function App() {
   const [collectedLetters, setCollectedLetters] = useState([]);
   const [isFeverTime, setIsFeverTime] = useState(false);
 
-  const getNextWord = useCallback(() => {
-      if (wordBagRef.current.length === 0) wordBagRef.current = [...WORD_LIST].sort(() => Math.random() - 0.5);
-      return wordBagRef.current.pop();
-  }, []);
+  const lastTimeRef = useRef(performance.now());
 
   const gameState = useRef({
     frames: 0, speed: 4, items: [], obstacles: [], effects: [], 
     player: { x: 180, y: 500, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 },
     feverTimer: 0, introTimer: 0, wordIntroTimer: 0, summonTimer: 0, baseSpeed: 4, sessionCoinsRef: 0,
-    currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 0,
-    speedMultiplier: 1.0, canvasWidth: 400, canvasHeight: 600, isGreatSummon: false
+    currentStage: 1, completedWordsCount: 0, canvasWidth: 400, canvasHeight: 600, isGreatSummon: false, speedMultiplier: 1.0
   });
 
   const requestRef = useRef();
-  const toggleSound = () => { const muted = audio.toggleMute(); setIsAudioMuted(muted); };
-
-  useEffect(() => {
-      if (currentView === 'menu' || currentView === 'shop' || currentView === 'login') audio.setMode('menu');
-      else if (currentView === 'game') audio.setMode((gameState.current.summonTimer > 0 || gameState.current.wordIntroTimer > 0) ? 'stopped' : (isFeverTime ? 'fever' : 'game'));
-      else audio.setMode('stopped');
-  }, [currentView, isFeverTime]);
+  const getNextWord = useCallback(() => { if (wordBagRef.current.length === 0) wordBagRef.current = [...WORD_LIST].sort(() => Math.random() - 0.5); return wordBagRef.current.pop(); }, []);
 
   useEffect(() => {
       const initAssets = async () => {
           let loadedAssets = {};
-          
-          setLoadingStatus(`正在載入固定圖檔...`);
-          setLoadingProgress(10);
-
-          const imageList = [
-              { key: 'boat1_side', src: 'boat1_side.png' },
-              { key: 'boat1_top', src: 'boat1_top.png' },
-              { key: 'boat2_side', src: 'boat2_side.png' },
-              { key: 'boat2_top', src: 'boat2_top.png' },
-              { key: 'boat3_side', src: 'boat3_side.png' },
-              { key: 'boat3_top', src: 'boat3_top.png' },
-              { key: 'boat4_side', src: 'boat4_side.png' },
-              { key: 'boat4_top', src: 'boat4_top.png' },
-              { key: 'boat5_side', src: 'boat5_side.png' },
-              { key: 'boat5_top', src: 'boat5_top.png' },
-              { key: 'dragon', src: 'dragon.png' },
-              { key: 'fish', src: 'fish.png' },
-              { key: 'whirlpool', src: 'whirlpool.png' },
-              { key: 'ghost_ship', src: 'ghost_ship.png' },
-              { key: 'zongzi', src: 'zongzi.png' },
-              { key: 'coin', src: 'coin.png' }
-          ];
-
+          const imageList = ['boat1_side.png', 'boat1_top.png', 'boat2_side.png', 'boat2_top.png', 'boat3_side.png', 'boat3_top.png', 'boat4_side.png', 'boat4_top.png', 'boat5_side.png', 'boat5_top.png', 'dragon.png', 'fish.png', 'whirlpool.png', 'ghost_ship.png', 'zongzi.png', 'coin.png'];
           let loadedCount = 0;
-          
-          await Promise.all(imageList.map(async (item) => {
-              const img = await loadImage(item.src);
-              if (img) {
-                  loadedAssets[item.key] = img;
-              }
-              loadedCount++;
-              setLoadingProgress(10 + Math.floor((loadedCount / imageList.length) * 85));
+          await Promise.all(imageList.map(async (src) => {
+              const img = await loadImage(src);
+              if (img) loadedAssets[src.replace('.png', '')] = img;
+              loadedCount++; setLoadingProgress(Math.floor((loadedCount / imageList.length) * 100));
           }));
-
-          setAssets(loadedAssets);
-          setLoadingStatus(`載入完成！`);
-          setLoadingProgress(100);
-          
-          setTimeout(() => {
-              setCurrentView('login'); 
-          }, 400);
+          setAssets(loadedAssets); setCurrentView('login');
       };
-      
       initAssets();
   }, []);
 
-  const buyUpgrade = (type) => { const currentLevel = parseInt(upgrades[type], 10) || 1; if (currentLevel >= MAX_LEVEL) return; const cost = UPGRADE_COSTS[currentLevel]; if (coins >= cost) { setCoins(c => c - cost); setUpgrades(prev => ({ ...prev, [type]: currentLevel + 1 })); } };
-
   const startGame = () => {
-    const maxLives = 2 + (parseInt(upgrades?.lives, 10) || 1); setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(maxLives); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsNewRecord(false); setIsHidingWordUI(true); 
-    const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); const speedMult = window.innerWidth <= 768 ? 0.6 : 1.0;
-    gameState.current = {
-      ...gameState.current, frames: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 260, wordIntroTimer: 0, summonTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
-    };
+    const ml = 2 + (upgrades.lives || 1); 
+    // 🌟 保留之前針對螢幕寬度的補償 (手機版故意放慢)
+    const mobileMult = window.innerWidth <= 768 ? 0.6 : 1.0;
+    setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(ml); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsHidingWordUI(true); 
+    const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0);
+    gameState.current = { ...gameState.current, frames: 0, items: [], obstacles: [], introTimer: 260, wordIntroTimer: 0, summonTimer: 0, sessionCoinsRef: 0, currentStage: 1, completedWordsCount: 0, speedMultiplier: mobileMult, speed: STAGE_CONFIG[1].speed * mobileMult, baseSpeed: STAGE_CONFIG[1].speed * mobileMult };
+    lastTimeRef.current = performance.now(); 
   };
 
-  const endGame = useCallback(() => { setIsPlaying(false); setGameOver(true); setCoins(c => c + gameState.current.sessionCoinsRef); audio.setMode('menu'); const finalSummons = gameState.current.completedWordsCount; setMaxSummons(prev => { if (finalSummons > prev) { setIsNewRecord(true); return finalSummons; } return prev; }); }, []);
+  const endGame = useCallback(() => { setIsPlaying(false); setGameOver(true); setCoins(c => c + gameState.current.sessionCoinsRef); audio.setMode('menu'); if (gameState.current.completedWordsCount > maxSummons) { setIsNewRecord(true); setMaxSummons(gameState.current.completedWordsCount); } }, [maxSummons]);
 
-  const handleCollectedLetter = (char, targetWord) => {
-    setCollectedLetters(prev => {
-      const nextIndex = prev.length;
-      if (nextIndex < targetWord.length && char === targetWord[nextIndex]) {
-        const newCollected = [...prev, char]; audio.sfxLetter(newCollected.length / targetWord.length);
-        if (newCollected.length === targetWord.length) {
-          gameState.current.completedWordsCount++; setSummonCount(gameState.current.completedWordsCount); let nextS = gameState.current.currentStage;
-          if (gameState.current.completedWordsCount === 2) nextS = 2; if (gameState.current.completedWordsCount === 4) nextS = 3;
-          if (nextS !== gameState.current.currentStage) { gameState.current.currentStage = nextS; gameState.current.baseSpeed = STAGE_CONFIG[nextS].speed * gameState.current.speedMultiplier; }
-          setIsHidingWordUI(true); gameState.current.summonTimer = 260; gameState.current.obstacles = []; gameState.current.isGreatSummon = (currentStageIdx === currentWordObj.stages.length - 1); audio.setMode('stopped'); 
-        }
-        return newCollected;
-      }
-      return prev;
-    });
-  };
-
-  const gameLoop = useCallback(() => {
+  const gameLoop = useCallback((currentTime) => {
     if (!isPlaying || gameOver) return;
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d'); const state = gameState.current; ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
-    const isAnimationPaused = state.wordIntroTimer > 0 || state.summonTimer > 0;
-    const targetWordObj = currentWordObj?.stages[currentStageIdx] || { word: 'ZONGZI', meaning: '粽子' };
-    const targetWord = targetWordObj.word; const targetMeaning = targetWordObj.meaning; const nextNeededChar = targetWord[collectedLetters.length];
-    const stageConfig = STAGE_CONFIG[state.currentStage];
-    ctx.fillStyle = isFeverTime ? '#fffbe6' : stageConfig.water; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-    ctx.fillStyle = isFeverTime ? '#ffe58f' : stageConfig.bank; ctx.fillRect(0, 0, 20, state.canvasHeight); ctx.fillRect(state.canvasWidth - 20, 0, 20, state.canvasHeight); ctx.strokeStyle = isFeverTime ? '#ffd666' : stageConfig.line; ctx.lineWidth = 2;
-    for(let i=0; i<6; i++) { const speedOffset = (state.introTimer > 0 || isAnimationPaused) ? 0 : (state.frames * state.speed); const yPos = (speedOffset + i * 120) % state.canvasHeight; ctx.beginPath(); ctx.moveTo(30, yPos); ctx.lineTo(30, yPos + 40); ctx.moveTo(state.canvasWidth - 30, yPos + 60); ctx.lineTo(state.canvasWidth - 30, yPos + 100); ctx.stroke(); }
-    const currentLvl = parseInt(upgrades?.lives, 10) || 1; const boatScale = getBoatScale(currentLvl);
     
-    if (state.introTimer > 0) {
-        state.introTimer--; const progress = 1 - (state.introTimer / 260);
-        if (progress < 0.7) {
-            const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.7) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
+    // 🌟 物理同步：Delta Time 計算 (dt=1 為標準 60fps)
+    const dt = (currentTime - lastTimeRef.current) / (1000 / 60);
+    lastTimeRef.current = currentTime;
+    const sDt = Math.min(dt, 3); // 限制最大補償避免瞬間飛走
+
+    const ctx = canvasRef.current.getContext('2d'); const s = gameState.current; ctx.clearRect(0, 0, 400, 600);
+    const stageWord = currentWordObj.stages[currentStageIdx].word; 
+    const isAnimationPaused = s.wordIntroTimer > 0 || s.summonTimer > 0;
+    
+    ctx.fillStyle = isFeverTime ? '#fffbe6' : STAGE_CONFIG[s.currentStage].water; ctx.fillRect(0, 0, 400, 600);
+    
+    if (s.introTimer > 0) {
+        s.introTimer -= sDt; const p = 1 - (s.introTimer / 260);
+        if (p < 0.7) {
+            const sideImg = assets[`boat${upgrades.lives}_side`]; const xPos = -400 + (p / 0.7) * 1200; ctx.save(); ctx.translate(xPos, 300);
             if (sideImg) { 
                 const baseW = 280, baseH = 140; 
-                if (FLIP_SIDE_BOATS.includes(currentLvl)) ctx.scale(-1, 1); 
-                ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); 
-            } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-100 * boatScale, -30 * boatScale, 200 * boatScale, 60 * boatScale); }
-            ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 100); ctx.shadowBlur = 0;
+                if (FLIP_SIDE_BOATS.includes(upgrades.lives)) ctx.scale(-1, 1); 
+                ctx.drawImage(sideImg, -baseW/2, -baseH/2, baseW, baseH); 
+            }
+            ctx.restore(); ctx.fillStyle = 'white'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.fillText(`Lv.${upgrades.lives} 龍舟出發！`, 200, 180);
         } else {
-            const p2 = (progress - 0.7) / 0.3; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
-            const topImg = getTargetAsset(assets, `boat${currentLvl}_top`);
-            if (topImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(topImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
+            const p2 = (p - 0.7) / 0.3; s.player.y = 650 - p2 * 170; s.player.x = 180;
+            const topImg = assets[`boat${upgrades.lives}_top`]; if (topImg) ctx.drawImage(topImg, 180-45, s.player.y-45, 90, 90);
         }
-        if (state.introTimer === 1) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
+        if (s.introTimer <= 1) s.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return;
+    }
+
+    if (!isAnimationPaused) { 
+        s.player.x += s.player.dx * sDt; 
+        s.player.x = Math.max(25, Math.min(335, s.player.x)); 
     }
     
-    if (!isAnimationPaused) { state.player.x += state.player.dx; if (state.player.x < 25) state.player.x = 25; if (state.player.x + state.player.width > state.canvasWidth - 25) state.player.x = state.canvasWidth - 25 - state.player.width; }
-    if (state.player.isInvincible && !isAnimationPaused) { state.player.invincibleTimer--; if (state.player.invincibleTimer <= 0) state.player.isInvincible = false; }
-    if (!state.player.isInvincible || Math.floor(state.player.invincibleTimer / 5) % 2 === 0) {
-        const boatImg = getTargetAsset(assets, `boat${currentLvl}_top`);
-        if (boatImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(boatImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
+    if (s.player.isInvincible && !isAnimationPaused) { 
+        s.player.invincibleTimer -= sDt; 
+        if (s.player.invincibleTimer <= 0) s.player.isInvincible = false; 
     }
-    if (state.currentStage === 3 && !isFeverTime && !isAnimationPaused) {
-        const gradient = ctx.createRadialGradient(state.player.x + 20, state.player.y + 40, 50, state.player.x + 20, state.player.y + 40, 250); gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(1, 'rgba(0,0,0,0.85)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
+    
+    if (!s.player.isInvincible || Math.floor(s.player.invincibleTimer / 5) % 2 === 0) {
+        const topImg = assets[`boat${upgrades.lives}_top`];
+        if (topImg) { ctx.save(); ctx.translate(s.player.x + 20, s.player.y + 40); ctx.drawImage(topImg, -45, -45, 90, 90); ctx.restore(); }
     }
+
     if (isFeverTime) {
-        if (!isAnimationPaused) state.feverTimer--; const floatY = Math.sin(state.frames * 0.1) * 5; ctx.save(); ctx.translate(state.canvasWidth/2, 30 + floatY);
-        if (assets?.dragon) { ctx.shadowBlur = 30; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -60, -60, 120, 120); } ctx.restore();
-        if (state.feverTimer <= 0) { setIsFeverTime(false); audio.setMode('game'); state.speed = state.baseSpeed; setIsHidingWordUI(true); state.wordIntroTimer = 150; if (state.lastNotifiedStage !== state.currentStage) { state.stageBannerTimer = 120; state.lastNotifiedStage = state.currentStage; } }
-    } 
-    if (!isAnimationPaused && state.frames % (isFeverTime ? 4 : 70) === 0) {
-        if (isFeverTime) { state.items.push({ x: state.canvasWidth/2 - 20, y: 80, width: 40, height: 40, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); } 
-        else {
-            let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
-            let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
-            
-            const startY = type === 'coin' ? -40 : -80; 
-            state.items.push({ x: xPos, y: startY, width: 40, height: 40, type, char, color, dx: 0, dy: 0 });
-        }
+        if (!isAnimationPaused) s.feverTimer -= sDt;
+        if (assets.dragon) ctx.drawImage(assets.dragon, 125, 20 + Math.sin(s.frames * 0.1)*5, 150, 150);
+        if (s.feverTimer <= 0) { setIsFeverTime(false); s.speed = s.baseSpeed; s.wordIntroTimer = 150; }
     }
-    if (!isAnimationPaused && !isFeverTime && state.frames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
-        const rand = Math.random(); let type, dx = 0; if (state.currentStage === 1) { type = rand > 0.5 ? 'log' : 'rock'; } else if (state.currentStage === 2) { if (rand < 0.33) type = 'log'; else if (rand < 0.66) type = 'rock'; else if (rand < 0.85) { type = 'fish'; dx = Math.random() > 0.5 ? 3 : -3; } else type = 'whirlpool'; } else { if (rand < 0.3) type = 'rock'; else if (rand < 0.6) { type = 'fish'; dx = Math.random() > 0.5 ? 4 : -4; } else if (rand < 0.8) type = 'whirlpool'; else type = 'ghost_ship'; }
-        const width = (type === 'log') ? 60 : (type === 'whirlpool' ? 50 : 45); const height = (type === 'log') ? 25 : (type === 'whirlpool' ? 50 : 45); const color = type === 'log' ? '#874d00' : (type === 'ghost_ship' ? '#00ffff' : '#595959');
-        let xP = 30 + Math.random() * (state.canvasWidth - 110); if (type === 'fish') { xP = dx > 0 ? 25 : state.canvasWidth - 70; } else { let att = 0; while(att < 10) { if (!state.items.some(it => Math.abs(it.x - xP) < Math.max(55, width) && Math.abs(it.y - (-50)) < 80)) break; xP = 30 + Math.random() * (state.canvasWidth - 110); att++; } }
-        state.obstacles.push({ x: xP, y: -50, width, height, type, color, dx, obsFrames: 0 });
+
+    if (!isAnimationPaused && s.frames % Math.floor(70/sDt || 70) === 0) {
+        const char = stageWord[collectedLetters.length];
+        s.items.push({ x: Math.random()*300+50, y: -80, char, type: isFeverTime ? 'coin' : 'letter' });
     }
-    for (let i = state.items.length - 1; i >= 0; i--) {
-        const item = state.items[i]; if (!isAnimationPaused) { item.x += item.dx || 0; item.y += item.dy || state.speed; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
+
+    for (let i = s.items.length - 1; i >= 0; i--) {
+        const item = s.items[i]; 
+        if (!isAnimationPaused) item.y += s.speed * sDt;
         
         if (item.type === 'coin') { 
-            const coinImg = getTargetAsset(assets, 'coin'); 
-            if (coinImg) { 
-                ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x, item.y, 40, 40); ctx.restore(); 
-            } else { 
-                ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 20, item.y + 20, 18, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); 
-            } 
+            if (assets.coin) ctx.drawImage(assets.coin, item.x-20, item.y-20, 40, 40); 
         } else {
-            const hoverY = Math.sin(state.frames * 0.15) * 4; 
-            const orbX = item.x + 20;
-            const orbY = item.y - 35 + hoverY; 
-
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(orbX, orbY);
-            ctx.lineTo(item.x + 20, item.y + 5);
-            ctx.strokeStyle = '#d48806'; 
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 2]); 
-            ctx.stroke();
-            ctx.restore();
-
-            const zongziImg = getTargetAsset(assets, 'zongzi'); 
-            if (zongziImg) { 
-                ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; 
-                ctx.drawImage(zongziImg, item.x, item.y, 40, 40); 
-                ctx.restore(); 
-            } else { 
-                ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(item.x+20, item.y); ctx.lineTo(item.x+40, item.y+30); ctx.lineTo(item.x, item.y+30); ctx.fill(); 
-            }
+            const hY = Math.sin(s.frames * 0.15) * 4;
+            ctx.save(); ctx.beginPath(); ctx.moveTo(item.x, item.y - 35 + hY); ctx.lineTo(item.x, item.y + 5);
+            ctx.strokeStyle = '#d48806'; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.restore();
+            if (assets.zongzi) ctx.drawImage(assets.zongzi, item.x-20, item.y-20, 40, 40);
             
-            drawDragonBall(ctx, orbX, orbY, 22, item.char, true, false); 
+            // 🌟 飛行時不發光，收集後爆發
+            drawDragonBall(ctx, item.x, item.y - 35 + hY, 22, item.char, true);
         }
-
-        if (!isAnimationPaused && checkCollision(state.player, item)) {
-            if (item.type === 'letter') { 
-                const orbX = item.x + 20;
-                const orbY = item.y - 35 + Math.sin(state.frames * 0.15) * 4;
-                
-                state.effects.push({ type: 'leaf_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 30 }); 
-                
-                const isCorrect = item.char === nextNeededChar;
-                if (isCorrect) { 
-                    const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; 
-                    state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: orbX, startY: orbY, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); 
-                    handleCollectedLetter(item.char, targetWord); 
-                } else { 
-                    state.effects.push({ type: 'letter_ascend', char: item.char, x: orbX, y: orbY, frames: 0, maxFrames: 45 }); 
+        
+        if (!isAnimationPaused && checkCollision(s.player, { x: item.x-20, y: item.y-20, width: 40, height: 40 })) {
+            if (item.type === 'letter' && item.char === stageWord[collectedLetters.length]) {
+                const nc = [...collectedLetters, item.char]; setCollectedLetters(nc); audio.sfxLetter(nc.length/stageWord.length);
+                if (nc.length === stageWord.length) { 
+                    s.summonTimer = 260; 
+                    s.isGreatSummon = (currentStageIdx === currentWordObj.stages.length - 1); 
+                    s.completedWordsCount++; 
                 }
-            } else if (item.type === 'coin') { 
-                state.effects.push({ type: 'coin_burst', x: item.x + 20, y: item.y + 20, frames: 0, maxFrames: 20 }); 
-                audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); 
-            }
-            state.items.splice(i, 1); continue;
+            } else if (item.type === 'coin') { s.sessionCoinsRef++; setSessionCoins(s.sessionCoinsRef); audio.sfxCoin(); }
+            s.items.splice(i, 1);
         }
-        if (item.y > state.canvasHeight) state.items.splice(i, 1);
-    }
-    for (let i = state.obstacles.length - 1; i >= 0; i--) {
-        const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed; obs.x += obs.dx || 0; obs.obsFrames = (obs.obsFrames || 0) + 1; if (obs.type === 'ghost_ship') { obs.y += 1.5; obs.x += Math.sin(obs.obsFrames * 0.1) * 2; } else if (obs.type === 'fish') obs.y += 1.0; }
-        const customAsset = getTargetAsset(assets, obs.type);
-        if (customAsset && obs.type !== 'log' && obs.type !== 'rock') { if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2); ctx.rotate(obs.obsFrames * 0.06); ctx.drawImage(customAsset, -obs.width/2 - 10, -obs.height/2 - 10, obs.width + 20, obs.height + 20); ctx.restore(); } else ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } else {
-            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (obs.obsFrames%10), 0, Math.PI * 2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI * 2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
-        }
-        if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
-        if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
-    }
-    for (let i = state.effects.length - 1; i >= 0; i--) {
-        const eff = state.effects[i]; const progress = eff.frames / eff.maxFrames; const alpha = 1 - progress; ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
-        if (eff.type === 'coin_burst') { ctx.fillStyle = '#fadb14'; for (let j = 0; j < 5; j++) { const angle = (Math.PI * 2 / 5) * j + (eff.frames * 0.1); const dist = eff.frames * 2.5; ctx.fillRect(eff.x + Math.cos(angle) * dist - 3, eff.y + Math.sin(angle) * dist - 3, 6, 6); } } else if (eff.type === 'leaf_burst') { ctx.fillStyle = '#389e0d'; for (let j = 0; j < 4; j++) { ctx.save(); const angle = (Math.PI * 2 / 4) * j; const dist = eff.frames * 1.5; ctx.translate(eff.x + Math.cos(angle) * dist, eff.y + Math.sin(angle) * dist + (eff.frames * 0.5)); ctx.rotate(eff.frames * 0.1); ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.fill(); ctx.restore(); } } else if (eff.type === 'letter_ascend') { const flyY = eff.y - (eff.frames * 4); ctx.globalAlpha = Math.max(0, alpha); drawDragonBall(ctx, eff.x, flyY, 15, eff.char, true, false); } else if (eff.type === 'letter_ascend_target') { const easeP = 1 - Math.pow(1 - progress, 3); const currentX = eff.startX + (eff.targetX - eff.startX) * easeP; const currentY = eff.startY + (eff.targetY - eff.startY) * easeP; const currentRadius = 15 - (easeP * 3); ctx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 5)); drawDragonBall(ctx, currentX, currentY, currentRadius, eff.char, true, false); }
-        ctx.restore(); eff.frames++; if (eff.frames >= eff.maxFrames) state.effects.splice(i, 1);
-    }
-    if (!isAnimationPaused) state.frames++; 
-    
-    if (state.wordIntroTimer > 0) {
-        state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-        const n = targetWord.length; 
-        const ballSpacing = 50; 
-        const startX = state.canvasWidth / 2 - (n * ballSpacing) / 2 + (ballSpacing / 2); 
-        const centerY = state.canvasHeight / 2 - 50;
-        for (let i = 0; i < n; i++) {
-            let x = startX + i * ballSpacing, y = centerY, r = 25; 
-            const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30; 
-            if (t > 120) { const p = (150 - t) / 30; y = -50 + p * (centerY + 50); } else if (t <= 50) { const p = 1 - (t / 50); x = x + p * (uiX - x); y = y + p * (uiY - y); r = 25 - p * 11; }
-            drawDragonBall(ctx, x, y, r, targetWord[i], false, true); 
-        }
-        let textY = centerY + 75, textAlpha = 1, textScale = 1; if (t > 120) { const p = (150 - t) / 30; textY = -50 + 75 + p * (centerY + 50); } else if (t <= 50) { const p = 1 - (t / 50); textY = centerY + 75 - p * 30; textAlpha = Math.max(0, 1 - p * 1.5); textScale = 1 - p * 0.2; }
-        if (textAlpha > 0) { ctx.globalAlpha = textAlpha; ctx.font = `900 ${36 * textScale}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 6 * textScale; ctx.strokeStyle = '#000000'; ctx.strokeText(targetMeaning, state.canvasWidth / 2, textY); const textGrad = ctx.createLinearGradient(0, textY - 20, 0, textY + 20); textGrad.addColorStop(0, '#b7eb8f'); textGrad.addColorStop(1, '#52c41a'); ctx.fillStyle = textGrad; ctx.fillText(targetMeaning, state.canvasWidth / 2, textY); }
-        ctx.restore();
+        if (item.y > 650) s.items.splice(i, i+1);
     }
 
-    if (state.summonTimer > 0) {
-        state.summonTimer--; const t = state.summonTimer; const maxT = 260; const isGreat = state.isGreatSummon; ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, (maxT - t) / 40)})`; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-        const cx = state.canvasWidth / 2, cy = state.player.y - 120;
-        const ritualWord = isGreat ? currentWordObj.fullWord : targetWord; const ritualMeaning = isGreat ? currentWordObj.fullMeaning : targetMeaning;
-        if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
+    if (s.summonTimer > 0) {
+        s.summonTimer -= sDt; const t = s.summonTimer; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,400,600);
+        const cx = 200, cy = s.player.y - 120;
         
-        // --- 動畫圖層 1：貫穿光柱 (放在最底層) ---
+        // --- 1. 光柱 (底層) ---
         if (t <= 140 && t > 0) {
-            const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); 
-            ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? 160 : 120; 
-            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); 
-            grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); 
-            grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); 
-            grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); 
-            ctx.fillStyle = grad; 
-            // 讓光柱的高度延伸到「下排龍珠的底部」，營造出無縫接合的感覺
-            const beamHeight = cy + 160; 
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamHeight); 
-            ctx.restore();
+            const beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
+            const grad = ctx.createLinearGradient(cx - 80, 0, cx + 80, 0); grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(0.5, 'white'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad; ctx.fillRect(cx - 80, 0, 160, cy + 120); ctx.restore();
         }
 
-        // --- 動畫圖層 2：神龍本體 (疊在光柱前，龍珠後) ---
+        // --- 2. 神龍 ---
         if (t <= 130) {
-            let dY, scale, alpha; 
-            if (t > 70) { 
-                const p = (130 - t) / 60; 
-                alpha = Math.min(1, p * 2); 
-                scale = 0.5 + p * 1.5; 
-                dY = cy + 20 - p * 80; 
-            } else if (t > 40) { 
-                alpha = 1; 
-                scale = 2.0 + Math.sin(t * 0.2) * 0.05; 
-                dY = cy - 60 + Math.sin(t * 0.1) * 5; 
-            } else { 
-                const p = (40 - t) / 40; 
-                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; 
-                alpha = 1; 
-                scale = 2.0 - ep * 0.5; 
-                const startY = cy - 60, endY = 30; 
-                dY = startY - ep * (startY - endY); 
-            }
-            ctx.save(); ctx.translate(cx, dY); ctx.globalAlpha = alpha; ctx.scale(scale, scale); 
-            if (assets?.dragon) { ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -75, -75, 150, 150); } 
-            else { drawGeometricDragon(ctx); } 
-            ctx.restore();
+            let dY, scale;
+            if (t > 70) { const p = (130-t)/60; scale = 0.5 + p*1.5; dY = cy + 20 - p*80; }
+            else if (t > 40) { scale = 2.0; dY = cy - 60; }
+            else { const p = (40-t)/40; scale = 2.0 - p*0.5; dY = (cy-60) - p*(cy-90); }
+            if (assets.dragon) { ctx.save(); ctx.translate(cx, dY); ctx.scale(scale, scale); ctx.drawImage(assets.dragon, -75, -75, 150, 150); ctx.restore(); }
         }
 
-        // --- 動畫圖層 3：龍珠陣法 (筆直排列) ---
-        // 飛下來時不發光，到定點後開始爆發充能
-        let isGlowing = t <= 200; 
-        let ritualGlow = 0;
-        if (isGlowing) {
-            if (t > 140) {
-                // 急遽充能階段
-                const chargeP = 1 - ((t - 140) / 60);
-                ritualGlow = Math.pow(chargeP, 4) * 30; 
-            } else {
-                ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
+        // --- 3. 龍珠 (筆直排列，無縫貼合) ---
+        const bR = 20; const is settled = t <= 200;
+        const n = stageWord.length; const stX = cx - (n * 40) / 2 + 20;
+        for (let i = 0; i < n; i++) {
+            let x = stX + i * 40, y = cy + 120;
+            // 飛下來的動畫
+            if (t > 200) { 
+                const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; 
+                x = uiX + p * (x - uiX); y = uiY + p * (y - uiY); 
             }
+            // 到底下才發強光
+            const glow = (t <= 200 && t > 140) ? Math.pow(1-((t-140)/60), 4)*30 : (t <= 140 ? 1.5 : 0);
+            drawDragonBall(ctx, x, y, bR, stageWord[i], true, !settled, glow);
         }
         
-        const ballRadius = 20;
-        const ballDiameter = ballRadius * 2;
-        const isSingleRow = !isGreat || currentWordObj.stages.length === 1;
-
-        if (isSingleRow) {
-            const n = targetWord.length;
-            const startX = cx - (n * ballDiameter) / 2 + (ballDiameter / 2);
-            for (let i = 0; i < n; i++) {
-                const uiX = state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, uiY = 30;
-                const tx = startX + i * ballDiameter; 
-                const ty = cy + 120; 
-                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], isGlowing, false, ritualGlow);
-            }
-        } else {
-            let prevWord = ""; for (let s = 0; s < currentStageIdx; s++) prevWord += currentWordObj.stages[s].word;
-            const n1 = prevWord.length;
-            const startX1 = cx - (n1 * ballDiameter) / 2 + (ballDiameter / 2);
-            for(let i = 0; i < n1; i++) {
-                const tx = startX1 + i * ballDiameter;
-                const ty = cy + 90; 
-                ctx.globalAlpha = t > 200 ? (260 - t) / 60 : 1; drawDragonBall(ctx, tx, ty, ballRadius, prevWord[i], isGlowing, false, ritualGlow); ctx.globalAlpha = 1;
-            }
-            const n2 = targetWord.length;
-            const startX2 = cx - (n2 * ballDiameter) / 2 + (ballDiameter / 2);
-            for(let i = 0; i < n2; i++) {
-                const uiX = state.canvasWidth - 20 - (n2 - 1 - i) * 32 - 14, uiY = 30;
-                const tx = startX2 + i * ballDiameter;
-                const ty = cy + 140; 
-                let x = tx, y = ty; if (t > 200) { const p = (260 - t) / 60; x = uiX + p * (tx - uiX); y = uiY + p * (ty - uiY); }
-                drawDragonBall(ctx, x, y, ballRadius, targetWord[i], isGlowing, false, ritualGlow);
-            }
+        if (t <= 0) { 
+            setIsFeverTime(true); s.feverTimer = 600; s.speed = 15; setCollectedLetters([]); 
+            if (s.isGreatSummon) { setCurrentWordObj(getNextWord()); setCurrentStageIdx(0); } else setCurrentStageIdx(p => p+1); 
         }
-        
-        // --- 動畫圖層 4：爆發耀斑 (全螢幕白光) ---
-        if (t <= 145 && t > 130) {
-            const flashP = t > 140 ? (145 - t) / 5 : (t - 130) / 10; 
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, Math.max(0, flashP));
-            const flashGrad = ctx.createRadialGradient(cx, cy + 120, 0, cx, cy + 120, 300);
-            flashGrad.addColorStop(0, '#ffffff');
-            flashGrad.addColorStop(0.5, '#faad14');
-            flashGrad.addColorStop(1, 'rgba(250, 173, 20, 0)');
-            ctx.fillStyle = flashGrad;
-            ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-            ctx.restore();
-        }
-        
-        // --- 動畫圖層 5：巨大標題字 ---
-        if (isGreat && t <= 200) {
-            const textAlpha = Math.min(1, (200 - t) / 20); ctx.save(); ctx.globalAlpha = textAlpha; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const textY = 120; ctx.font = '900 36px sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = '#000000'; ctx.strokeText(`${ritualWord}`, cx, textY);
-            const grad = ctx.createLinearGradient(0, textY-20, 0, textY+20); grad.addColorStop(0, '#ffe58f'); grad.addColorStop(1, '#faad14'); ctx.fillStyle = grad; ctx.fillText(`${ritualWord}`, cx, textY);
-            ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
-        }
-
-        if (t === 0) { setIsFeverTime(true); setIsHidingWordUI(false); audio.setMode('fever'); const fl = parseInt(upgrades?.fever, 10) || 1; state.feverTimer = (10 + (fl - 1) * 2) * 60; state.speed = 15 * state.speedMultiplier; state.items = []; setCollectedLetters([]); if (state.isGreatSummon) { const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); } else setCurrentStageIdx(prev => prev + 1); }
     }
-    if (state.stageBannerTimer > 0) { state.stageBannerTimer--; ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, state.canvasHeight/4 - 30, state.canvasWidth, 60); ctx.fillStyle = '#fadb14'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`Stage ${state.currentStage}: ${stageConfig.name}`, state.canvasWidth/2, state.canvasHeight/4 + 8); }
+
+    if (!isAnimationPaused) s.frames++;
     requestRef.current = requestAnimationFrame(gameLoop);
-  }, [isPlaying, gameOver, isFeverTime, collectedLetters, currentWordObj, currentStageIdx, upgrades, endGame, assets, getNextWord]);
+  }, [isPlaying, gameOver, currentWordObj, currentStageIdx, collectedLetters, upgrades.lives, assets, getNextWord]);
 
-  useEffect(() => {
-    const handleKeyDown = (e) => { if (currentView !== 'game' || !isPlaying || gameOver || gameState.current.summonTimer > 0 || gameState.current.wordIntroTimer > 0) return; if (e.key === 'ArrowLeft') gameState.current.player.dx = -8; if (e.key === 'ArrowRight') gameState.current.player.dx = 8; };
-    const handleKeyUp = (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') gameState.current.player.dx = 0; };
-    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [currentView, isPlaying, gameOver]);
+  useEffect(() => { if (isPlaying) requestRef.current = requestAnimationFrame(gameLoop); return () => cancelAnimationFrame(requestRef.current); }, [isPlaying, gameLoop]);
 
-  const handleTouchStart = (e) => { if (currentView !== 'game' || !isPlaying || gameOver || gameState.current.summonTimer > 0 || gameState.current.wordIntroTimer > 0) return; if (e.target.closest('button')) return; touchRef.current.lastX = e.touches[0].clientX; gameState.current.player.dx = 0; };
-  const handleTouchMove = (e) => {
-      if (currentView !== 'game' || !isPlaying || gameOver || touchRef.current.lastX === null) return;
-      const cx = e.touches[0].clientX; const dx = cx - touchRef.current.lastX; const canvas = canvasRef.current;
-      const sx = canvas ? (gameState.current.canvasWidth / canvas.getBoundingClientRect().width) : 1;
-      gameState.current.player.x += dx * sx * 1.5; if (gameState.current.player.x < 25) gameState.current.player.x = 25; if (gameState.current.player.x + gameState.current.player.width > gameState.current.canvasWidth - 25) gameState.current.player.x = gameState.current.canvasWidth - 25 - gameState.current.player.width; touchRef.current.lastX = cx;
-  };
-  const touchRef = useRef({ lastX: null });
-  const handleTouchEnd = () => { touchRef.current.lastX = null; if (currentView === 'game') gameState.current.player.dx = 0; };
+  if (currentView === 'loading') return <div className="h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-3xl font-black mb-4 text-blue-300">極速載入中...</h1><div className="w-64 h-2 bg-gray-800 rounded overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{width:`${loadingProgress}%`}}></div></div><p className="mt-2 text-blue-400 font-bold">{loadingStatus}</p></div>;
 
-  useEffect(() => { if (currentView === 'game' && isPlaying && !gameOver) requestRef.current = requestAnimationFrame(gameLoop); return () => { if(requestRef.current) cancelAnimationFrame(requestRef.current); }; }, [gameLoop, currentView, isPlaying, gameOver]);
-
-  const currentLivesLvl = parseInt(upgrades?.lives, 10) || 1;
-  const currentFeverLvl = parseInt(upgrades?.fever, 10) || 1;
-  const SoundToggleButton = () => ( <button onClick={toggleSound} className="absolute top-4 right-4 z-50 bg-white/80 p-3 rounded-full shadow-lg text-2xl"> {isAudioMuted ? '🔇' : '🔊'} </button> );
-
-  if (currentView === 'loading') { return ( <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-gray-900 text-white p-6 text-center"> <div className="text-8xl mb-6 animate-bounce">✨</div> <h1 className="text-3xl font-black mb-4 text-blue-300">極速載入中...</h1> <p className="text-gray-400 mb-8 max-w-md">正在為您準備高畫質遊戲素材，請稍候！</p> <div className="w-full max-w-sm h-4 bg-gray-800 rounded-full overflow-hidden mb-2"><div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div></div> <p className="text-purple-300 font-bold">{loadingStatus}</p> </div> ); }
-
-  if (currentView === 'login') {
-      return (
-          <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative">
-              <SoundToggleButton />
-              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center flex flex-col items-center">
-                  <div className="text-6xl mb-4">🐉</div>
-                  <h1 className="text-3xl font-black text-blue-900 mb-2">龍舟通行證</h1>
-                  <p className="text-gray-500 mb-6 text-sm">請輸入您的名號，我們將自動保存與同步您的長征紀錄！跨裝置也能無縫接軌！</p>
-                  
-                  <input 
-                      type="text" 
-                      value={inputName} 
-                      onChange={e => setInputName(e.target.value)}
-                      placeholder="輸入名號 (例如: 阿龍)"
-                      className="w-full border-2 border-blue-200 rounded-xl p-4 mb-6 text-center text-xl font-bold text-gray-700 focus:outline-none focus:border-blue-500 shadow-inner"
-                      maxLength={15}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleLogin(inputName); }}
-                  />
-                  
-                  <button 
-                      onClick={() => handleLogin(inputName)}
-                      disabled={!inputName.trim()}
-                      className={`w-full py-4 text-white text-xl font-bold rounded-xl shadow-md transition-colors ${inputName.trim() ? 'bg-blue-500 hover:bg-blue-600 transform transition-transform hover:scale-105' : 'bg-gray-300 cursor-not-allowed'}`}
-                  >
-                      確認登入
-                  </button>
-              </div>
-          </div>
-      );
-  }
-
-  if (currentView === 'menu') { 
-      return ( 
-          <div className="flex flex-col items-center justify-center h-screen overflow-hidden bg-blue-50 p-4 relative"> 
-              <SoundToggleButton /> 
-              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center flex flex-col items-center"> 
-                  <div className="text-6xl mb-4">🐉🛶</div> 
-                  <h1 className="text-4xl font-black text-blue-900 mb-1">端午龍舟長征</h1> 
-                  
-                  <div className="flex flex-col items-center mb-5">
-                      <p className="text-gray-500 font-bold text-sm">歡迎船長：<span className="text-blue-600">{playerName}</span></p>
-                      <button onClick={() => setCurrentView('login')} className="text-xs text-gray-400 hover:text-gray-600 underline mt-1">切換名號</button>
-                  </div>
-
-                  <p className="text-gray-500 mb-6 text-sm">閃避險阻、收集單字、解鎖跨時代的神龍傳說！</p> 
-                  <div className="flex gap-3 mb-8 w-full justify-center"> 
-                      <div className="bg-yellow-100 px-4 py-2 rounded-full font-bold text-yellow-700 text-sm shadow-sm">💰 資金: {coins}</div> 
-                      <div className="bg-blue-100 px-4 py-2 rounded-full font-bold text-blue-700 text-sm shadow-sm">🐉 最多召喚: {maxSummons} 次</div> 
-                  </div> 
-                  <div className="flex flex-col gap-4 w-full"> 
-                      <button onClick={startGame} className="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">▶ 開始長征</button> 
-                      <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold rounded-xl shadow-md transform transition-transform hover:scale-105">🛠️ 龍舟改造廠</button> 
-                  </div> 
-              </div> 
-          </div> 
-      ); 
-  }
-
-  if (currentView === 'shop') { return ( <div className="flex flex-col items-center h-screen overflow-y-auto bg-blue-50 p-4 pt-10 relative"> <SoundToggleButton /> <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-[400px]"> <div className="flex justify-between items-center mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-gray-800">🛠️ 龍舟改造廠</h2><div className="bg-yellow-100 px-4 py-1 rounded-full font-bold text-yellow-700">💰 {coins}</div></div> <div className="bg-gray-50 p-4 rounded-xl mb-4 border border-gray-200"> <div className="flex justify-between items-start mb-2"> <div className="pr-2"><h3 className="font-bold text-lg text-red-600">❤️ 強化船體</h3><p className="text-sm text-gray-500">目前: {2 + currentLivesLvl} 命</p></div> <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">Lv. {currentLivesLvl}/{MAX_LEVEL}</span> </div> <div className="flex flex-col items-center gap-2 my-4 py-4 bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden"> <BoatPreview level={currentLivesLvl} isNext={false} assets={assets} onClick={setGalleryLevel} isLocked={false} /> {currentLivesLvl < MAX_LEVEL && (<React.Fragment><div className="text-2xl text-gray-300 animate-pulse my-1">▼</div><BoatPreview level={currentLivesLvl + 1} isNext={true} assets={assets} onClick={setGalleryLevel} isLocked={true} /></React.Fragment>)} </div> <button onClick={() => buyUpgrade('lives')} disabled={currentLivesLvl >= MAX_LEVEL || coins < UPGRADE_COSTS[currentLivesLvl]} className={`w-full py-2 mt-2 rounded-lg font-bold transition-colors ${currentLivesLvl >= MAX_LEVEL ? 'bg-gray-300 text-gray-500' : coins < UPGRADE_COSTS[currentLivesLvl] ? 'bg-gray-200 text-gray-400' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-sm'}`}>{currentLivesLvl >= MAX_LEVEL ? 'MAX' : `升級花費: 💰 ${UPGRADE_COSTS[currentLivesLvl]}`}</button> </div> <div className="bg-gray-50 p-4 rounded-xl mb-6 border border-gray-200"> <div className="flex justify-between items-start mb-2"> <div className="pr-2"><h3 className="font-bold text-lg text-orange-500">🔥 神龍降臨延長</h3><p className="text-sm text-gray-500">延長神龍噴吐金幣與無敵的時間。</p></div> <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">Lv. {currentFeverLvl}/{MAX_LEVEL}</span> </div> <button onClick={() => buyUpgrade('fever')} disabled={currentFeverLvl >= MAX_LEVEL || coins < UPGRADE_COSTS[currentFeverLvl]} className={`w-full py-2 mt-2 rounded-lg font-bold transition-colors ${currentFeverLvl >= MAX_LEVEL ? 'bg-gray-300 text-gray-500' : coins < UPGRADE_COSTS[currentFeverLvl] ? 'bg-gray-200 text-gray-400' : 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 shadow-sm'}`}>{currentFeverLvl >= MAX_LEVEL ? 'MAX' : `升級花費: 💰 ${UPGRADE_COSTS[currentFeverLvl]}`}</button> </div> <button onClick={() => setCurrentView('menu')} className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-xl shadow-md">返回首頁</button> </div> {galleryLevel !== null && ( <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto animate-fadeIn"> <button onClick={() => setGalleryLevel(null)} className="fixed top-6 right-6 text-white text-5xl font-light hover:text-red-400 transition-colors z-50 leading-none">&times;</button> <div className="min-h-screen flex flex-col items-center justify-center p-6 py-16 w-full"> <h2 className="text-4xl font-black text-white mb-2 text-center">{galleryLevel > currentLivesLvl ? '??? 神祕龍舟' : `Lv.${galleryLevel} 龍舟圖鑑`}</h2> <div className="text-blue-400 mb-8 font-bold text-lg text-center">{galleryLevel > currentLivesLvl ? '🔒 尚未解鎖 (剪影預覽)' : '✨ 已解鎖'}</div> <div className="flex flex-col gap-6 items-center w-full max-w-[400px]"> <LargeBoatPreview level={galleryLevel} assets={assets} viewType="side" isLocked={galleryLevel > currentLivesLvl} /> <LargeBoatPreview level={galleryLevel} assets={assets} viewType="top" isLocked={galleryLevel > currentLivesLvl} /> </div> <div className="flex justify-between w-full max-w-[320px] mt-10"> <button onClick={() => setGalleryLevel(Math.max(1, galleryLevel - 1))} disabled={galleryLevel <= 1} className="px-6 py-3 rounded-full font-bold text-lg bg-blue-600 text-white">◀ 上一階</button> <button onClick={() => setGalleryLevel(Math.min(MAX_LEVEL, galleryLevel + 1))} disabled={galleryLevel >= MAX_LEVEL} className="px-6 py-3 rounded-full font-bold text-lg bg-blue-600 text-white">下一階 ▶</button> </div> </div> </div> )} </div> ); }
-
-  const targetWordObj = currentWordObj?.stages[currentStageIdx] || { word: 'ZONGZI', meaning: '粽子' };
-  const totalLivesCount = 2 + currentLivesLvl;
+  if (currentView === 'login') return (
+    <div className="h-screen bg-blue-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center">
+            <h1 className="text-3xl font-black text-blue-900 mb-6">龍舟通行證</h1>
+            <input type="text" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="輸入名號" className="w-full border-2 border-blue-200 rounded-xl p-4 mb-6 text-center text-xl font-bold" />
+            <button onClick={() => handleLogin(inputName)} disabled={!inputName.trim()} className="w-full py-4 bg-blue-500 text-white text-xl font-bold rounded-xl shadow-md">確認登入</button>
+        </div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col items-center bg-gray-900 font-sans touch-none w-full h-screen overflow-hidden relative" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-      <div className="w-full max-w-[400px] bg-white px-3 py-2 flex items-center justify-between shadow-md z-20 shrink-0 border-b-4 border-blue-900">
-          <div className={`flex flex-col transition-opacity duration-300 ${isHidingWordUI ? 'opacity-0' : 'opacity-100'}`}>
-              <span className="text-[10px] text-gray-500 font-bold leading-none mb-0.5">收集單字召喚神龍</span>
-              <span className="text-sm font-black text-green-700 leading-none">{targetWordObj.word} <span className="text-xs text-gray-500 font-bold">({targetWordObj.meaning})</span></span>
-          </div>
-          <div className={`flex gap-1 transition-opacity duration-300 ${isHidingWordUI ? 'opacity-0' : 'opacity-100'}`}>
-              {targetWordObj.word.split('').map((char, index) => { const isCollected = index < collectedLetters.length; return ( <div key={index} className={`relative w-7 h-7 flex items-center justify-center rounded-full text-sm font-bold border-2 transition-all duration-300 shadow-md ${isCollected ? 'bg-gradient-to-br from-yellow-300 to-orange-500 text-red-700 border-yellow-200 transform scale-110' : 'bg-gradient-to-br from-gray-300 to-gray-500 text-gray-700 border-gray-400'}`}> <div className="absolute top-[10%] left-[15%] w-[30%] h-[30%] bg-white rounded-full opacity-40"></div> {char} </div> ); })}
-          </div>
+    <div className="h-screen bg-gray-900 flex flex-col items-center overflow-hidden font-sans">
+      <div className={`w-full max-w-[400px] bg-white p-3 flex justify-between items-center shadow-xl z-10 transition-opacity ${isHidingWordUI ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="flex flex-col"><span className="text-[10px] text-gray-500 font-bold leading-none">收集單字召喚神龍</span><span className="font-black text-green-700 leading-none">{currentWordObj.stages[currentStageIdx].word} ({currentWordObj.stages[currentStageIdx].meaning})</span></div>
+          <div className="flex gap-1"> {currentWordObj.stages[currentStageIdx].word.split('').map((c, i) => <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center font-bold border-2 transition-all ${i < collectedLetters.length ? 'bg-orange-500 border-yellow-300 text-white scale-110' : 'bg-gray-200 text-gray-300'}`}>{c}</div>)} </div>
       </div>
-      {isFeverTime && <div className="absolute top-16 z-30 bg-orange-500 text-white text-xs font-black px-4 py-1 rounded-full animate-bounce shadow-lg pointer-events-none">🔥 神龍降臨！狂接金幣！ 🔥</div>}
-      <div className="flex-1 w-full max-w-[400px] min-h-0 relative flex flex-col items-center justify-center p-2">
-          <div className="relative w-full h-full max-h-full aspect-[2/3] bg-blue-200 rounded-xl shadow-2xl border-x-4 border-b-4 border-t border-blue-900 overflow-hidden">
-              <canvas ref={canvasRef} width={400} height={600} className="w-full h-full block" />
-              <div className="absolute top-0 left-0 w-full p-2 flex justify-between items-start pointer-events-none bg-gradient-to-b from-black/60 to-transparent h-20 z-10">
-                  <div className="flex flex-col items-start pointer-events-auto">
-                      <span className="text-[10px] text-white/80 font-bold leading-none mb-1">神龍召喚</span>
-                      <span className="text-2xl font-black text-white leading-none drop-shadow-md">{summonCount}</span>
-                  </div>
-                  <div className="flex flex-col items-center mt-1">
-                      <span className="text-xl font-bold text-yellow-300 drop-shadow-md bg-black/30 px-2 py-0.5 rounded-full backdrop-blur-sm">💰 {sessionCoins}</span>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 pointer-events-auto">
-                      <button onClick={(e) => { e.stopPropagation(); toggleSound(); }} className="bg-black/40 hover:bg-black/60 rounded-full p-1.5 backdrop-blur-sm text-sm text-white border border-white/20"> {isAudioMuted ? '🔇' : '🔊'} </button>
-                      <div className="flex text-red-500 text-[10px] gap-0.5 drop-shadow-md bg-black/40 px-1.5 py-0.5 rounded-full backdrop-blur-sm"> {Array.from({ length: totalLivesCount }).map((_, i) => ( <span key={i} className={i < lives ? 'opacity-100' : 'opacity-30 grayscale'}>❤️</span> ))} </div>
-                  </div>
+      <div className="flex-1 relative w-full max-w-[400px] bg-blue-200">
+          <canvas ref={canvasRef} width={400} height={600} className="w-full h-full block" />
+          <div className="absolute top-4 left-4 flex flex-col"><span className="text-[10px] text-white/70 font-bold">召喚次數</span><span className="text-2xl font-black text-white drop-shadow-md">{summonCount}</span></div>
+          <div className="absolute top-4 right-4 bg-yellow-500/80 px-3 py-1 rounded-full text-black font-black shadow-lg">💰 {coins}</div>
+          {currentView === 'menu' && (
+              <div className="absolute inset-0 bg-blue-900/90 flex flex-col items-center justify-center p-8 text-center animate-fadeIn z-20">
+                  <h1 className="text-4xl font-black text-white mb-8">端午龍舟長征</h1>
+                  <button onClick={startGame} className="w-full py-5 bg-green-500 hover:bg-green-400 text-white text-2xl font-black rounded-2xl shadow-2xl mb-4">▶ 開始長征</button>
+                  <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold rounded-2xl">🛠️ 龍舟改造廠</button>
               </div>
-              {gameOver && (
-                  <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center z-20 p-4 text-center animate-fadeIn pointer-events-auto">
-                      <h2 className="text-3xl font-black text-white mb-2 tracking-widest">航行結束</h2>
-                      <div className="bg-white/10 p-4 rounded-xl border border-white/20 w-full max-w-[85%] mb-4 backdrop-blur-sm relative">
-                          {isNewRecord && <div className="absolute -top-4 -right-2 bg-red-500 text-white text-xs font-black px-3 py-1 rounded-full animate-bounce shadow-lg border-2 border-white/50 rotate-12 z-30 tracking-widest">新紀錄!</div>}
-                          <div className="text-gray-300 text-xs mb-1">本次召喚</div> <div className={`text-4xl font-black mb-3 drop-shadow-lg ${isNewRecord ? 'text-yellow-400' : 'text-blue-300'}`}>{summonCount} 次</div> <div className="h-px bg-white/20 w-full my-2"></div> <div className="flex justify-between items-center text-sm mb-1"> <span className="text-gray-300">獲得金幣</span> <span className="text-yellow-400 font-bold">+ 💰 {sessionCoins}</span> </div> <div className="flex justify-between items-center text-xs mt-2 border-t border-white/10 pt-2"> <span className="text-gray-400">歷史最多</span> <span className="text-gray-300 font-bold tracking-wider">{maxSummons} 次</span> </div>
-                      </div>
-                      <div className="flex flex-col gap-2 w-full max-w-[85%]"> <button onClick={(e) => { e.stopPropagation(); startGame(); }} className="w-full py-2.5 bg-green-500 hover:bg-green-400 text-white text-lg font-bold rounded-lg shadow-lg">🔄 再玩一次</button> <button onClick={(e) => { e.stopPropagation(); setCurrentView('menu'); }} className="w-full py-2.5 bg-gray-600 hover:bg-gray-500 text-white text-base font-bold rounded-lg">🏠 回到首頁</button> </div>
-                  </div>
-              )}
-          </div>
+          )}
       </div>
-      <div className="shrink-0 pb-2 text-gray-500 text-[10px] text-center w-full">電腦: [←][→] 方向鍵 | 手機: 左右滑動螢幕拖曳龍舟</div>
     </div>
   );
 }
