@@ -341,7 +341,6 @@ const drawGeometricBoat = (ctx, x, y, width, height, levelInput) => {
     ctx.restore();
 };
 
-// 🌟 修改：如果以(0,0)為中心繪製，直接在原點畫即可，方便配合 translate 使用
 const drawGeometricDragon = (ctx, xOffset = 0, yOffset = 0) => {
     ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(xOffset, yOffset, 50, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#f5222d'; ctx.fillRect(xOffset-25, yOffset-10, 15, 5); ctx.fillRect(xOffset+10, yOffset-10, 15, 5);
@@ -516,11 +515,11 @@ export default function App() {
   }, []);
 
   const gameState = useRef({
-    frames: 0, speed: 4, items: [], obstacles: [], effects: [], 
+    frames: 0, logicFrames: 0, frameAccumulator: 0, speed: 4, items: [], obstacles: [], effects: [], 
     player: { x: 180, y: 500, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 },
     feverTimer: 0, introTimer: 0, wordIntroTimer: 0, summonTimer: 0, flashTimer: 0, baseSpeed: 4, sessionCoinsRef: 0,
     currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 0,
-    speedMultiplier: 1.0, canvasWidth: 400, canvasHeight: 600, isGreatSummon: false
+    speedMultiplier: 1.0, canvasWidth: 400, canvasHeight: 600, isGreatSummon: false, lastTime: 0
   });
 
   const requestRef = useRef();
@@ -563,7 +562,7 @@ export default function App() {
     const maxLives = 2 + (parseInt(upgrades?.lives, 10) || 1); setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(maxLives); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsNewRecord(false); setIsHidingWordUI(true); 
     const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); const speedMult = window.innerWidth <= 768 ? 0.6 : 1.0;
     gameState.current = {
-      ...gameState.current, frames: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 180, wordIntroTimer: 0, summonTimer: 0, flashTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
+      ...gameState.current, frames: 0, logicFrames: 0, frameAccumulator: 0, lastTime: 0, items: [], obstacles: [], effects: [], player: { x: 180, y: 480, width: 40, height: 80, dx: 0, isInvincible: false, invincibleTimer: 0 }, feverTimer: 0, introTimer: 240, wordIntroTimer: 0, summonTimer: 0, flashTimer: 0, sessionCoinsRef: 0, currentStage: 1, lastNotifiedStage: 1, completedWordsCount: 0, stageBannerTimer: 120, speedMultiplier: speedMult, speed: STAGE_CONFIG[1].speed * speedMult, baseSpeed: STAGE_CONFIG[1].speed * speedMult, isGreatSummon: false
     };
   };
 
@@ -586,36 +585,79 @@ export default function App() {
     });
   };
 
-  const gameLoop = useCallback(() => {
+  const gameLoop = useCallback((timestamp) => {
     if (!isPlaying || gameOver) return;
     const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d'); const state = gameState.current; ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
+    const ctx = canvas.getContext('2d'); const state = gameState.current; 
+    
+    // --- 🌟 引入 Delta Time (dt) 物理同步 ---
+    const now = timestamp || performance.now();
+    if (!state.lastTime) state.lastTime = now;
+    let dt = now - state.lastTime;
+    state.lastTime = now;
+    if (dt > 100) dt = 16.666; // 避免切換分頁導致的巨大跳躍
+    const dtFactor = dt / 16.666;
+
+    ctx.clearRect(0, 0, state.canvasWidth, state.canvasHeight);
+    
     const isAnimationPaused = state.wordIntroTimer > 0 || state.summonTimer > 0;
     const targetWordObj = currentWordObj?.stages[currentStageIdx] || { word: 'ZONGZI', meaning: '粽子' };
     const targetWord = targetWordObj.word; const targetMeaning = targetWordObj.meaning; const nextNeededChar = targetWord[collectedLetters.length];
     const stageConfig = STAGE_CONFIG[state.currentStage];
     
+    // --- 🌟 離散生成邏輯 (確保高螢幕更新率下生成機率一致) ---
+    if (!isAnimationPaused) {
+        state.frames += dtFactor;
+        state.frameAccumulator = (state.frameAccumulator || 0) + dtFactor;
+        while (state.frameAccumulator >= 1) {
+            state.logicFrames = (state.logicFrames || 0) + 1;
+            state.frameAccumulator -= 1;
+            
+            if (isFeverTime) { 
+                if (state.logicFrames % 4 === 0) state.items.push({ x: state.canvasWidth/2 - 15, y: 80, width: 30, height: 30, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); 
+            } else {
+                if (state.logicFrames % 70 === 0) {
+                    let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
+                    const iWidth = type === 'letter' ? 44 : 30; const iHeight = type === 'letter' ? 44 : 30;
+                    let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
+                    state.items.push({ x: xPos, y: -60, width: iWidth, height: iHeight, type, char, color, dx: 0, dy: 0 });
+                }
+                if (state.logicFrames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
+                    const rand = Math.random(); let type, dx = 0; if (state.currentStage === 1) { type = rand > 0.5 ? 'log' : 'rock'; } else if (state.currentStage === 2) { if (rand < 0.33) type = 'log'; else if (rand < 0.66) type = 'rock'; else if (rand < 0.85) { type = 'fish'; dx = Math.random() > 0.5 ? 3 : -3; } else type = 'whirlpool'; } else { if (rand < 0.3) type = 'rock'; else if (rand < 0.6) { type = 'fish'; dx = Math.random() > 0.5 ? 4 : -4; } else if (rand < 0.8) type = 'whirlpool'; else type = 'ghost_ship'; }
+                    const width = (type === 'log') ? 60 : (type === 'whirlpool' ? 50 : 45); const height = (type === 'log') ? 25 : (type === 'whirlpool' ? 50 : 45); const color = type === 'log' ? '#874d00' : (type === 'ghost_ship' ? '#00ffff' : '#595959');
+                    let xP = 30 + Math.random() * (state.canvasWidth - 110); if (type === 'fish') { xP = dx > 0 ? 25 : state.canvasWidth - 70; } else { let att = 0; while(att < 10) { if (!state.items.some(it => Math.abs(it.x - xP) < Math.max(55, width) && Math.abs(it.y - (-50)) < 80)) break; xP = 30 + Math.random() * (state.canvasWidth - 110); att++; } }
+                    state.obstacles.push({ x: xP, y: -50, width, height, type, color, dx, obsFrames: 0 });
+                }
+            }
+        }
+    }
+
     ctx.fillStyle = isFeverTime ? '#fffbe6' : stageConfig.water; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
     ctx.fillStyle = isFeverTime ? '#ffe58f' : stageConfig.bank; ctx.fillRect(0, 0, 20, state.canvasHeight); ctx.fillRect(state.canvasWidth - 20, 0, 20, state.canvasHeight); ctx.strokeStyle = isFeverTime ? '#ffd666' : stageConfig.line; ctx.lineWidth = 2;
     for(let i=0; i<6; i++) { const speedOffset = (state.introTimer > 0 || isAnimationPaused) ? 0 : (state.frames * state.speed); const yPos = (speedOffset + i * 120) % state.canvasHeight; ctx.beginPath(); ctx.moveTo(30, yPos); ctx.lineTo(30, yPos + 40); ctx.moveTo(state.canvasWidth - 30, yPos + 60); ctx.lineTo(state.canvasWidth - 30, yPos + 100); ctx.stroke(); }
     
     const currentLvl = parseInt(upgrades?.lives, 10) || 1; const boatScale = getBoatScale(currentLvl);
+    
+    // 🌟 史詩展示：放慢穿越速度與放大 200%
     if (state.introTimer > 0) {
-        state.introTimer--; const progress = 1 - (state.introTimer / 180);
-        if (progress < 0.6) {
-            const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.6) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
+        const prevIntro = state.introTimer;
+        state.introTimer = Math.max(0, state.introTimer - dtFactor);
+        const progress = 1 - (state.introTimer / 240); // 總幀數 240
+        if (progress < 0.7) { // 側邊展示時間加長 (0.7)
+            const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.7) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
+            ctx.scale(2, 2); // 🌟 放大 200%
             if (sideImg) { const baseW = 140, baseH = 80; ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
         } else {
-            const p2 = (progress - 0.6) / 0.4; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
+            const p2 = (progress - 0.7) / 0.3; state.player.y = state.canvasHeight + 50 - p2 * (state.canvasHeight - 480 + 50); state.player.x = state.canvasWidth / 2 - state.player.width / 2;
             const topImg = getTargetAsset(assets, `boat${currentLvl}_top`);
             if (topImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); const baseS = 90; ctx.drawImage(topImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
         }
-        if (state.introTimer === 1) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
+        if (prevIntro > 0 && state.introTimer <= 0) state.wordIntroTimer = 150; requestRef.current = requestAnimationFrame(gameLoop); return; 
     }
 
-    if (!isAnimationPaused) { state.player.x += state.player.dx; if (state.player.x < 25) state.player.x = 25; if (state.player.x + state.player.width > state.canvasWidth - 25) state.player.x = state.canvasWidth - 25 - state.player.width; }
-    if (state.player.isInvincible && !isAnimationPaused) { state.player.invincibleTimer--; if (state.player.invincibleTimer <= 0) state.player.isInvincible = false; }
+    if (!isAnimationPaused) { state.player.x += state.player.dx * dtFactor; if (state.player.x < 25) state.player.x = 25; if (state.player.x + state.player.width > state.canvasWidth - 25) state.player.x = state.canvasWidth - 25 - state.player.width; }
+    if (state.player.isInvincible && !isAnimationPaused) { state.player.invincibleTimer -= dtFactor; if (state.player.invincibleTimer <= 0) state.player.isInvincible = false; }
     
     if (!state.player.isInvincible || Math.floor(state.player.invincibleTimer / 5) % 2 === 0) {
         const boatImg = getTargetAsset(assets, `boat${currentLvl}_top`);
@@ -627,55 +669,37 @@ export default function App() {
     }
     
     if (isFeverTime) {
-        if (!isAnimationPaused) state.feverTimer--; const floatY = Math.sin(state.frames * 0.1) * 5; ctx.save(); ctx.translate(state.canvasWidth/2, 30 + floatY);
+        if (!isAnimationPaused) {
+            const prevFever = state.feverTimer;
+            state.feverTimer = Math.max(0, state.feverTimer - dtFactor);
+            if (prevFever > 0 && state.feverTimer === 0) { setIsFeverTime(false); audio.setMode('game'); state.speed = state.baseSpeed; setIsHidingWordUI(true); state.wordIntroTimer = 150; if (state.lastNotifiedStage !== state.currentStage) { state.stageBannerTimer = 120; state.lastNotifiedStage = state.currentStage; } }
+        }
+        const floatY = Math.sin(state.frames * 0.1) * 5; ctx.save(); ctx.translate(state.canvasWidth/2, 30 + floatY);
         if (assets?.dragon) { ctx.shadowBlur = 30; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -60, -60, 120, 120); } ctx.restore();
-        if (state.feverTimer <= 0) { setIsFeverTime(false); audio.setMode('game'); state.speed = state.baseSpeed; setIsHidingWordUI(true); state.wordIntroTimer = 150; if (state.lastNotifiedStage !== state.currentStage) { state.stageBannerTimer = 120; state.lastNotifiedStage = state.currentStage; } }
     } 
 
-    if (!isAnimationPaused && state.frames % (isFeverTime ? 4 : 70) === 0) {
-        if (isFeverTime) { state.items.push({ x: state.canvasWidth/2 - 15, y: 80, width: 30, height: 30, type: 'coin', color: '#faad14', dx: (Math.random() - 0.5) * 12, dy: state.speed + Math.random() * 5 }); } 
-        else {
-            let type, char, color; if (Math.random() > 0.3) { type = 'letter'; char = (Math.random() > 0.35 && nextNeededChar) ? nextNeededChar : String.fromCharCode(65 + Math.floor(Math.random() * 26)); color = '#52c41a'; } else { type = 'coin'; color = '#faad14'; }
-            // 🌟 將「字母（龍珠粽子）」的尺寸放大
-            const iWidth = type === 'letter' ? 44 : 30; const iHeight = type === 'letter' ? 44 : 30;
-            let xPos = 30 + Math.random() * (state.canvasWidth - 90); let attempts = 0; while(attempts < 10) { if (!state.obstacles.some(obs => Math.abs(obs.x - xPos) < 55 && Math.abs(obs.y - (-30)) < 80)) break; xPos = 30 + Math.random() * (state.canvasWidth - 90); attempts++; }
-            state.items.push({ x: xPos, y: -60, width: iWidth, height: iHeight, type, char, color, dx: 0, dy: 0 });
-        }
-    }
-
-    if (!isAnimationPaused && !isFeverTime && state.frames % stageConfig.obsRate === 0 && Math.random() > 0.1) {
-        const rand = Math.random(); let type, dx = 0; if (state.currentStage === 1) { type = rand > 0.5 ? 'log' : 'rock'; } else if (state.currentStage === 2) { if (rand < 0.33) type = 'log'; else if (rand < 0.66) type = 'rock'; else if (rand < 0.85) { type = 'fish'; dx = Math.random() > 0.5 ? 3 : -3; } else type = 'whirlpool'; } else { if (rand < 0.3) type = 'rock'; else if (rand < 0.6) { type = 'fish'; dx = Math.random() > 0.5 ? 4 : -4; } else if (rand < 0.8) type = 'whirlpool'; else type = 'ghost_ship'; }
-        const width = (type === 'log') ? 60 : (type === 'whirlpool' ? 50 : 45); const height = (type === 'log') ? 25 : (type === 'whirlpool' ? 50 : 45); const color = type === 'log' ? '#874d00' : (type === 'ghost_ship' ? '#00ffff' : '#595959');
-        let xP = 30 + Math.random() * (state.canvasWidth - 110); if (type === 'fish') { xP = dx > 0 ? 25 : state.canvasWidth - 70; } else { let att = 0; while(att < 10) { if (!state.items.some(it => Math.abs(it.x - xP) < Math.max(55, width) && Math.abs(it.y - (-50)) < 80)) break; xP = 30 + Math.random() * (state.canvasWidth - 110); att++; } }
-        state.obstacles.push({ x: xP, y: -50, width, height, type, color, dx, obsFrames: 0 });
-    }
-
     for (let i = state.items.length - 1; i >= 0; i--) {
-        const item = state.items[i]; if (!isAnimationPaused) { item.x += item.dx || 0; item.y += item.dy || state.speed; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
+        const item = state.items[i]; if (!isAnimationPaused) { item.x += (item.dx || 0) * dtFactor; item.y += (item.dy || state.speed) * dtFactor; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
         
         if (item.type === 'coin') { 
             const coinImg = getTargetAsset(assets, 'coin'); if (coinImg) { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x - 5, item.y - 5, 40, 40); ctx.restore(); } else { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 14, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); } 
         } else {
-            // 🌟 牽引繩綁粽子效果
             const cx = item.x + item.width / 2;
-            const hoverY = Math.sin(state.frames * 0.15) * 5; // 讓龍珠上下浮動
-            const ball_y = item.y - 45 + hoverY; // 龍珠在粽子上方
-            const zongzi_y = item.y + item.height / 2; // 粽子中心點
+            const hoverY = Math.sin(state.frames * 0.15) * 5; 
+            const ball_y = item.y - 45 + hoverY; 
+            const zongzi_y = item.y + item.height / 2; 
 
-            // 畫繩子 (連接龍珠底部到粽子頂部)
             ctx.beginPath(); ctx.moveTo(cx, ball_y); ctx.lineTo(cx, zongzi_y); ctx.strokeStyle = 'rgba(212, 177, 6, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.setLineDash([]); 
 
-            // 畫粽子 (在下方)
             const zongziImg = getTargetAsset(assets, 'zongzi'); if (zongziImg) { ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.drawImage(zongziImg, item.x, item.y, item.width, item.height); ctx.restore(); } else { ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(cx, item.y); ctx.lineTo(item.x+item.width, item.y+item.height); ctx.lineTo(item.x, item.y+item.height); ctx.fill(); }
             
-            // 畫巨大化龍珠 (在上方，半徑加大到 22)
             drawDragonBall(ctx, cx, ball_y, 22, item.char, true, false); 
         }
 
         if (!isAnimationPaused && checkCollision(state.player, item)) {
             if (item.type === 'letter') { 
-                const cx = item.x + item.width / 2; const ball_y = item.y - 45; // 特效要從龍珠原本的位置開始
-                state.effects.push({ type: 'leaf_burst', x: cx, y: item.y + item.height/2, frames: 0, maxFrames: 30 }); // 粽子爆炸特效
+                const cx = item.x + item.width / 2; const ball_y = item.y - 45; 
+                state.effects.push({ type: 'leaf_burst', x: cx, y: item.y + item.height/2, frames: 0, maxFrames: 30 }); 
                 const isCorrect = item.char === nextNeededChar;
                 if (isCorrect) { const n = targetWord.length; const collectedCount = collectedLetters.length; const uiX = state.canvasWidth - 20 - (n - 1 - collectedCount) * 32 - 14; const uiY = 30; state.effects.push({ type: 'letter_ascend_target', char: item.char, startX: cx, startY: ball_y, targetX: uiX, targetY: uiY, frames: 0, maxFrames: 40 }); handleCollectedLetter(item.char, targetWord); } else { state.effects.push({ type: 'letter_ascend', char: item.char, x: cx, y: ball_y, frames: 0, maxFrames: 45 }); }
             } else if (item.type === 'coin') { state.effects.push({ type: 'coin_burst', x: item.x + item.width/2, y: item.y + item.height/2, frames: 0, maxFrames: 20 }); audio.sfxCoin(); state.sessionCoinsRef += 1; setSessionCoins(state.sessionCoinsRef); }
@@ -685,10 +709,10 @@ export default function App() {
     }
 
     for (let i = state.obstacles.length - 1; i >= 0; i--) {
-        const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed; obs.x += obs.dx || 0; obs.obsFrames = (obs.obsFrames || 0) + 1; if (obs.type === 'ghost_ship') { obs.y += 1.5; obs.x += Math.sin(obs.obsFrames * 0.1) * 2; } else if (obs.type === 'fish') obs.y += 1.0; }
+        const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed * dtFactor; obs.x += (obs.dx || 0) * dtFactor; obs.obsFrames = (obs.obsFrames || 0) + dtFactor; if (obs.type === 'ghost_ship') { obs.y += 1.5 * dtFactor; obs.x += Math.sin(obs.obsFrames * 0.1) * 2 * dtFactor; } else if (obs.type === 'fish') obs.y += 1.0 * dtFactor; }
         const customAsset = getTargetAsset(assets, obs.type);
         if (customAsset && obs.type !== 'log' && obs.type !== 'rock') { if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2); ctx.rotate(obs.obsFrames * 0.06); ctx.drawImage(customAsset, -obs.width/2 - 10, -obs.height/2 - 10, obs.width + 20, obs.height + 20); ctx.restore(); } else ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } else {
-            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (obs.obsFrames%10), 0, Math.PI*2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI*2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
+            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (Math.floor(obs.obsFrames)%10), 0, Math.PI*2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI*2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
         }
         if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
         if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
@@ -697,12 +721,16 @@ export default function App() {
     for (let i = state.effects.length - 1; i >= 0; i--) {
         const eff = state.effects[i]; const progress = eff.frames / eff.maxFrames; const alpha = 1 - progress; ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
         if (eff.type === 'coin_burst') { ctx.fillStyle = '#fadb14'; for (let j = 0; j < 5; j++) { const angle = (Math.PI * 2 / 5) * j + (eff.frames * 0.1); const dist = eff.frames * 2.5; ctx.fillRect(eff.x + Math.cos(angle) * dist - 3, eff.y + Math.sin(angle) * dist - 3, 6, 6); } } else if (eff.type === 'leaf_burst') { ctx.fillStyle = '#389e0d'; for (let j = 0; j < 4; j++) { ctx.save(); const angle = (Math.PI * 2 / 4) * j; const dist = eff.frames * 1.5; ctx.translate(eff.x + Math.cos(angle) * dist, eff.y + Math.sin(angle) * dist + (eff.frames * 0.5)); ctx.rotate(eff.frames * 0.1); ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.fill(); ctx.restore(); } } else if (eff.type === 'letter_ascend') { const flyY = eff.y - (eff.frames * 4); ctx.globalAlpha = Math.max(0, alpha); drawDragonBall(ctx, eff.x, flyY, 15, eff.char, true, false); } else if (eff.type === 'letter_ascend_target') { const easeP = 1 - Math.pow(1 - progress, 3); const currentX = eff.startX + (eff.targetX - eff.startX) * easeP; const currentY = eff.startY + (eff.targetY - eff.startY) * easeP; const currentRadius = 15 - (easeP * 3); ctx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 5)); drawDragonBall(ctx, currentX, currentY, currentRadius, eff.char, true, false); }
-        ctx.restore(); eff.frames++; if (eff.frames >= eff.maxFrames) state.effects.splice(i, 1);
+        ctx.restore(); eff.frames += dtFactor; if (eff.frames >= eff.maxFrames) state.effects.splice(i, 1);
     }
-    if (!isAnimationPaused) state.frames++; 
     
     if (state.wordIntroTimer > 0) {
-        state.wordIntroTimer--; const t = state.wordIntroTimer; if (t === 120) speakWord(targetWord); if (t === 1) setIsHidingWordUI(false); ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
+        const prevWordTimer = state.wordIntroTimer;
+        state.wordIntroTimer = Math.max(0, state.wordIntroTimer - dtFactor); 
+        const t = state.wordIntroTimer; 
+        if (prevWordTimer >= 120 && t < 120) speakWord(targetWord); 
+        if (prevWordTimer > 0 && t === 0) setIsHidingWordUI(false); 
+        ctx.save(); ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         const n = targetWord.length; 
         const ballSpacing = 50; 
         const startX = state.canvasWidth / 2 - (n * ballSpacing) / 2 + (ballSpacing / 2); 
@@ -719,13 +747,16 @@ export default function App() {
     }
 
     if (state.summonTimer > 0) {
-        state.summonTimer--; const t = state.summonTimer; const maxT = 260; const isGreat = state.isGreatSummon; ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, (maxT - t) / 40)})`; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
+        const prevSummonTimer = state.summonTimer;
+        state.summonTimer = Math.max(0, state.summonTimer - dtFactor);
+        const t = state.summonTimer; const maxT = 260; const isGreat = state.isGreatSummon; 
+        ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, (maxT - t) / 40)})`; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         
-        // 🌟 修改點：將龍珠中心點 cy 定義得更低，預留上方出龍的空間 (船通常在 480 左右，所以 460 在船的前方)
         const cx = state.canvasWidth / 2, cy = state.canvasHeight - 140; 
-        
         const ritualWord = isGreat ? currentWordObj.fullWord : targetWord; const ritualMeaning = isGreat ? currentWordObj.fullMeaning : targetMeaning;
-        if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
+        
+        if (prevSummonTimer >= 200 && t < 200) speakWord(ritualWord); 
+        if (prevSummonTimer >= 140 && t < 140) audio.sfxRoar(); 
         const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
         
         if (isGreat && t <= 200) {
@@ -735,7 +766,6 @@ export default function App() {
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
         
-        // 🌟 光束繪製：圖層在龍珠後方，且底部精準停在下移後的 cy
         if (t <= 140 && t > 0) {
             const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
             const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
@@ -743,7 +773,6 @@ export default function App() {
             ctx.restore();
         }
         
-        // 🌟 史詩召喚：水平緊貼無縫排列龍珠
         let allChars = []; let uis = [];
         if (!isGreat || currentWordObj.stages.length === 1) {
             const n = targetWord.length;
@@ -764,29 +793,27 @@ export default function App() {
         for(let i=0; i<totalChars; i++) {
             const ui = uis[i]; const tx = startX + i * activeDia; const ty = cy; let x = tx, y = ty; let alpha = 1;
             if (!ui) { if (t > 200) alpha = (260 - t) / 60; } else { if (t > 200) { const p = (260 - t) / 60; x = ui.x + p * (tx - ui.x); y = ui.y + p * (ty - ui.y); } }
-            // 🌟 修改點：當神龍破繭而出時，底下的龍珠會逐漸淡出
-            if (t <= 110) { alpha *= Math.max(0, 1 - (110 - t) / 30); }
+            
+            // 🌟 修改點：龍珠與光束同步消失 (t <= 30 時淡出)
+            if (t <= 30) { alpha *= Math.max(0, t / 30); }
             ctx.save(); ctx.globalAlpha = alpha; drawDragonBall(ctx, x, y, activeRadius, allChars[i], true, false, ritualGlow); ctx.restore();
         }
 
-        // 🌟 修改點：神龍從龍珠中心「破繭而出」，從小變大，往上浮動
         if (t <= 110) {
             let dY, scale, alpha = 1; 
             if (t > 40) { 
-                // 階段一：從龍珠中心慢慢變大、向上浮
                 const p = (110 - t) / 70; 
-                const startY = cy; // 起點就是剛才計算出的龍珠中心 cy
-                const targetY = state.canvasHeight / 2 - 50; // 最終停在畫面上方偏中
+                const startY = cy; 
+                const targetY = state.canvasHeight / 2 - 50; 
                 dY = startY + p * (targetY - startY); 
-                scale = 0.1 + p * 1.4; // 比例從 0.1 放大到 1.5
-                alpha = Math.min(1, (110 - t) / 15); // 出現的前15幀快速淡入
+                scale = 0.1 + p * 1.4; 
+                alpha = Math.min(1, (110 - t) / 15); 
             } else { 
-                // 階段二：準備進入 Fever 前的最後衝刺與放大
                 const p = (40 - t) / 40; 
                 const startY = state.canvasHeight / 2 - 50, endY = 30; 
-                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // 緩動效果
+                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; 
                 dY = startY - ep * (startY - endY); 
-                scale = 1.5 + ep * 0.7; // 衝刺時再進一步放大到 2.2 左右
+                scale = 1.5 + ep * 0.7; 
             }
             
             ctx.save(); 
@@ -797,13 +824,12 @@ export default function App() {
                 ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; 
                 ctx.drawImage(assets.dragon, -75, -75, 150, 150); 
             } else {
-                // 如果沒有圖片，幾何神龍繪製在當前 translate 的(0,0)位置
                 drawGeometricDragon(ctx, 0, 0); 
             }
             ctx.restore();
         }
 
-        if (t === 0) { 
+        if (prevSummonTimer > 0 && t === 0) { 
             setIsFeverTime(true); setIsHidingWordUI(false); audio.setMode('fever'); 
             const fl = parseInt(upgrades?.fever, 10) || 1; state.feverTimer = (10 + (fl - 1) * 2) * 60; 
             state.flashTimer = 30; 
@@ -812,12 +838,11 @@ export default function App() {
         }
     }
     
-    if (state.stageBannerTimer > 0) { state.stageBannerTimer--; ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, state.canvasHeight/4 - 30, state.canvasWidth, 60); ctx.fillStyle = '#fadb14'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`Stage ${state.currentStage}: ${stageConfig.name}`, state.canvasWidth/2, state.canvasHeight/4 + 8); }
+    if (state.stageBannerTimer > 0) { state.stageBannerTimer -= dtFactor; ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, state.canvasHeight/4 - 30, state.canvasWidth, 60); ctx.fillStyle = '#fadb14'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`Stage ${state.currentStage}: ${stageConfig.name}`, state.canvasWidth/2, state.canvasHeight/4 + 8); }
     
-    // 🌟 繪製召喚瞬間的閃爍特效
     if (state.flashTimer > 0) {
-        state.flashTimer--; ctx.save();
-        ctx.fillStyle = `rgba(255, 255, 255, ${state.flashTimer / 30})`;
+        state.flashTimer -= dtFactor; ctx.save();
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, state.flashTimer / 30)})`;
         ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
         ctx.restore();
     }
