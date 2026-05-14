@@ -341,9 +341,10 @@ const drawGeometricBoat = (ctx, x, y, width, height, levelInput) => {
     ctx.restore();
 };
 
-const drawGeometricDragon = (ctx, w, h) => {
-    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(w/2, h/2, 50, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f5222d'; ctx.fillRect(w/2-25, h/2-10, 15, 5); ctx.fillRect(w/2+10, h/2-10, 15, 5);
+// 🌟 修改：如果以(0,0)為中心繪製，直接在原點畫即可，方便配合 translate 使用
+const drawGeometricDragon = (ctx, xOffset = 0, yOffset = 0) => {
+    ctx.fillStyle = '#d48806'; ctx.beginPath(); ctx.arc(xOffset, yOffset, 50, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f5222d'; ctx.fillRect(xOffset-25, yOffset-10, 15, 5); ctx.fillRect(xOffset+10, yOffset-10, 15, 5);
 };
 
 const getTargetAsset = (assets, name) => (!assets || assets === "fallback") ? null : assets[name];
@@ -719,7 +720,10 @@ export default function App() {
 
     if (state.summonTimer > 0) {
         state.summonTimer--; const t = state.summonTimer; const maxT = 260; const isGreat = state.isGreatSummon; ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, (maxT - t) / 40)})`; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-        const cx = state.canvasWidth / 2, cy = state.player.y - 120;
+        
+        // 🌟 修改點：將龍珠中心點 cy 定義得更低，預留上方出龍的空間 (船通常在 480 左右，所以 460 在船的前方)
+        const cx = state.canvasWidth / 2, cy = state.canvasHeight - 140; 
+        
         const ritualWord = isGreat ? currentWordObj.fullWord : targetWord; const ritualMeaning = isGreat ? currentWordObj.fullMeaning : targetMeaning;
         if (t === 200) speakWord(ritualWord); if (t === 140) audio.sfxRoar(); 
         const ritualGlow = Math.abs(Math.sin(state.frames * 0.2)) * 1.2;
@@ -731,11 +735,11 @@ export default function App() {
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
         
-        // 🌟 光束繪製：圖層在龍珠後方，且底部精準停在 cy (龍珠中心)
+        // 🌟 光束繪製：圖層在龍珠後方，且底部精準停在下移後的 cy
         if (t <= 140 && t > 0) {
             const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
             const bw = isGreat ? 160 : 120; const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy); // 高度就是 cy，不再延伸
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, cy); 
             ctx.restore();
         }
         
@@ -752,26 +756,57 @@ export default function App() {
         
         const totalChars = allChars.length; 
         const maxAllowedWidth = state.canvasWidth - 40; 
-        const idealDia = 40; // 預設每顆龍珠的直徑 (緊貼狀態下，間距 = 0，寬度 = 直徑)
+        const idealDia = 40; 
         const activeDia = Math.min(idealDia, maxAllowedWidth / totalChars); 
         const activeRadius = activeDia / 2;
-        const startX = cx - ((totalChars * activeDia) / 2) + activeRadius; // 計算第一顆龍珠的中心點 X
+        const startX = cx - ((totalChars * activeDia) / 2) + activeRadius; 
         
         for(let i=0; i<totalChars; i++) {
             const ui = uis[i]; const tx = startX + i * activeDia; const ty = cy; let x = tx, y = ty; let alpha = 1;
             if (!ui) { if (t > 200) alpha = (260 - t) / 60; } else { if (t > 200) { const p = (260 - t) / 60; x = ui.x + p * (tx - ui.x); y = ui.y + p * (ty - ui.y); } }
+            // 🌟 修改點：當神龍破繭而出時，底下的龍珠會逐漸淡出
+            if (t <= 110) { alpha *= Math.max(0, 1 - (110 - t) / 30); }
             ctx.save(); ctx.globalAlpha = alpha; drawDragonBall(ctx, x, y, activeRadius, allChars[i], true, false, ritualGlow); ctx.restore();
         }
 
+        // 🌟 修改點：神龍從龍珠中心「破繭而出」，從小變大，往上浮動
         if (t <= 110) {
-            let dY, scale, alpha = 1; if (t > 40) { const p = (110 - t) / 30; const startY = -150, targetY = cy + 20; dY = startY + Math.min(1, p) * (targetY - startY); scale = 1.0 + Math.min(1, p) * 0.5; if (t > 80) alpha = Math.min(1, (110 - t) / 15); } else { const p = (40 - t) / 40; const startY = cy + 20, endY = 30; const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; dY = startY - ep * (startY - endY); scale = 1.5 - ep * 0.7; }
-            ctx.save(); ctx.translate(cx, dY); ctx.globalAlpha = alpha; ctx.scale(scale, scale); if (assets?.dragon) { ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -75, -75, 150, 150); } else drawGeometricDragon(ctx, state.canvasWidth, state.canvasHeight); ctx.restore();
+            let dY, scale, alpha = 1; 
+            if (t > 40) { 
+                // 階段一：從龍珠中心慢慢變大、向上浮
+                const p = (110 - t) / 70; 
+                const startY = cy; // 起點就是剛才計算出的龍珠中心 cy
+                const targetY = state.canvasHeight / 2 - 50; // 最終停在畫面上方偏中
+                dY = startY + p * (targetY - startY); 
+                scale = 0.1 + p * 1.4; // 比例從 0.1 放大到 1.5
+                alpha = Math.min(1, (110 - t) / 15); // 出現的前15幀快速淡入
+            } else { 
+                // 階段二：準備進入 Fever 前的最後衝刺與放大
+                const p = (40 - t) / 40; 
+                const startY = state.canvasHeight / 2 - 50, endY = 30; 
+                const ep = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // 緩動效果
+                dY = startY - ep * (startY - endY); 
+                scale = 1.5 + ep * 0.7; // 衝刺時再進一步放大到 2.2 左右
+            }
+            
+            ctx.save(); 
+            ctx.translate(cx, dY); 
+            ctx.globalAlpha = alpha; 
+            ctx.scale(scale, scale); 
+            if (assets?.dragon) { 
+                ctx.shadowBlur = 50; ctx.shadowColor = '#faad14'; 
+                ctx.drawImage(assets.dragon, -75, -75, 150, 150); 
+            } else {
+                // 如果沒有圖片，幾何神龍繪製在當前 translate 的(0,0)位置
+                drawGeometricDragon(ctx, 0, 0); 
+            }
+            ctx.restore();
         }
 
         if (t === 0) { 
             setIsFeverTime(true); setIsHidingWordUI(false); audio.setMode('fever'); 
             const fl = parseInt(upgrades?.fever, 10) || 1; state.feverTimer = (10 + (fl - 1) * 2) * 60; 
-            state.flashTimer = 30; // 🌟 觸發全螢幕閃白
+            state.flashTimer = 30; 
             state.speed = 15 * state.speedMultiplier; state.items = []; setCollectedLetters([]); 
             if (state.isGreatSummon) { const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0); } else setCurrentStageIdx(prev => prev + 1); 
         }
