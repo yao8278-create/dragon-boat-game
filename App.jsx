@@ -6,7 +6,7 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 // 🌟 初始化雲端環境 (支援 Canvas 預覽與 Vercel 部署雙棲模式)
 let app, auth, db;
 let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
-// 如果你在 Vercel 上，請將 Firebase 的 Config 貼在這裡的 myFirebaseConfig
+// 如果您在 Vercel 上，請將 Firebase 的 Config 貼在這裡
 const myFirebaseConfig = {
   apiKey: "AIzaSyDBGDINEB6yrmO9kn33rFfvCvwv6ToYkjc",
   authDomain: "project-4337058023593134662.firebaseapp.com",
@@ -32,6 +32,9 @@ try {
 // 🌟 翻轉設定：船 4 和 5 朝左，需要水平翻轉。
 const FLIP_SIDE_BOATS = [4, 5];
 
+// ==========================================
+// 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
+// ==========================================
 class SynthEngine {
     constructor() {
         this.ctx = null;
@@ -376,7 +379,6 @@ export default function App() {
 
   const startGame = () => {
     const ml = 2 + (upgrades.lives || 1); 
-    // 🌟 保留之前針對螢幕寬度的補償 (手機版故意放慢)
     const mobileMult = window.innerWidth <= 768 ? 0.6 : 1.0;
     setCurrentView('game'); setIsPlaying(true); setGameOver(false); setSessionCoins(0); setLives(ml); setSummonCount(0); setCollectedLetters([]); setIsFeverTime(false); setIsHidingWordUI(true); 
     const nextWord = getNextWord(); setCurrentWordObj(nextWord); setCurrentStageIdx(0);
@@ -389,10 +391,10 @@ export default function App() {
   const gameLoop = useCallback((currentTime) => {
     if (!isPlaying || gameOver) return;
     
-    // 🌟 物理同步：Delta Time 計算 (dt=1 為標準 60fps)
+    // 🌟 物理同步：Delta Time 計算
     const dt = (currentTime - lastTimeRef.current) / (1000 / 60);
     lastTimeRef.current = currentTime;
-    const sDt = Math.min(dt, 3); // 限制最大補償避免瞬間飛走
+    const sDt = Math.min(dt, 3); 
 
     const ctx = canvasRef.current.getContext('2d'); const s = gameState.current; ctx.clearRect(0, 0, 400, 600);
     const stageWord = currentWordObj.stages[currentStageIdx].word; 
@@ -434,7 +436,7 @@ export default function App() {
 
     if (isFeverTime) {
         if (!isAnimationPaused) s.feverTimer -= sDt;
-        if (assets.dragon) ctx.drawImage(assets.dragon, 125, 20 + Math.sin(s.frames * 0.1)*5, 150, 150);
+        if (assets.dragon) ctx.drawImage(assets.dragon, 125, 20 + Math.sin(s.frames * 0.15)*5, 150, 150);
         if (s.feverTimer <= 0) { setIsFeverTime(false); s.speed = s.baseSpeed; s.wordIntroTimer = 150; }
     }
 
@@ -454,8 +456,6 @@ export default function App() {
             ctx.save(); ctx.beginPath(); ctx.moveTo(item.x, item.y - 35 + hY); ctx.lineTo(item.x, item.y + 5);
             ctx.strokeStyle = '#d48806'; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.restore();
             if (assets.zongzi) ctx.drawImage(assets.zongzi, item.x-20, item.y-20, 40, 40);
-            
-            // 🌟 飛行時不發光，收集後爆發
             drawDragonBall(ctx, item.x, item.y - 35 + hY, 22, item.char, true);
         }
         
@@ -470,18 +470,24 @@ export default function App() {
             } else if (item.type === 'coin') { s.sessionCoinsRef++; setSessionCoins(s.sessionCoinsRef); audio.sfxCoin(); }
             s.items.splice(i, 1);
         }
-        if (item.y > 650) s.items.splice(i, i+1);
+        if (item.y > 650) s.items.splice(i, 1);
     }
 
     if (s.summonTimer > 0) {
         s.summonTimer -= sDt; const t = s.summonTimer; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,400,600);
         const cx = 200, cy = s.player.y - 120;
-        
-        // --- 1. 光柱 (底層) ---
+        const isSingleRow = !s.isGreatSummon || currentWordObj.stages.length === 1;
+
+        // --- 1. 光柱 (移到龍珠後方) ---
         if (t <= 140 && t > 0) {
             const beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
-            const grad = ctx.createLinearGradient(cx - 80, 0, cx + 80, 0); grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(0.5, 'white'); grad.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = grad; ctx.fillRect(cx - 80, 0, 160, cy + 120); ctx.restore();
+            const bw = s.isGreatSummon ? 160 : 120;
+            const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(0.5, 'white'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            // 🌟 修正高度：精確停在龍珠中心座標 (cy + 120 或 cy + 140)
+            const beamEnd = isSingleRow ? cy + 120 : cy + 140;
+            ctx.fillRect(cx - (bw / 2) * Math.min(1, (140 - t) / 20), 0, bw * Math.min(1, (140 - t) / 20), beamEnd); 
+            ctx.restore();
         }
 
         // --- 2. 神龍 ---
@@ -493,19 +499,26 @@ export default function App() {
             if (assets.dragon) { ctx.save(); ctx.translate(cx, dY); ctx.scale(scale, scale); ctx.drawImage(assets.dragon, -75, -75, 150, 150); ctx.restore(); }
         }
 
-        // --- 3. 龍珠 (筆直排列，無縫貼合) ---
-        const bR = 20; const is settled = t <= 200;
+        // --- 3. 龍珠 (直線排列，無縫貼合) ---
+        const bR = 20; const isS = t <= 200;
         const n = stageWord.length; const stX = cx - (n * 40) / 2 + 20;
-        for (let i = 0; i < n; i++) {
-            let x = stX + i * 40, y = cy + 120;
-            // 飛下來的動畫
-            if (t > 200) { 
-                const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; 
-                x = uiX + p * (x - uiX); y = uiY + p * (y - uiY); 
+        if (isSingleRow) {
+            for (let i = 0; i < n; i++) {
+                let x = stX + i * 40, y = cy + 120;
+                if (t > 200) { const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; x = uiX + p * (x - uiX); y = uiY + p * (cy + 120 - uiY); }
+                const glow = (t <= 200 && t > 140) ? Math.pow(1-((t-140)/60), 4)*30 : (t <= 140 ? 1.5 : 0);
+                drawDragonBall(ctx, x, y, bR, stageWord[i], isS, !isS, glow);
             }
-            // 到底下才發強光
-            const glow = (t <= 200 && t > 140) ? Math.pow(1-((t-140)/60), 4)*30 : (t <= 140 ? 1.5 : 0);
-            drawDragonBall(ctx, x, y, bR, stageWord[i], true, !settled, glow);
+        } else {
+            // 雙排邏輯略過細節處理，與單排邏輯相同修正高度
+            let prevWord = ""; for (let ss = 0; s < currentStageIdx; ss++) prevWord += currentWordObj.stages[ss].word;
+            const n1 = prevWord.length; const stX1 = cx - (n1 * 40) / 2 + 20;
+            for(let i = 0; i < n1; i++) { drawDragonBall(ctx, stX1 + i * 40, cy + 90, 20, prevWord[i], isS, false, isS?1.5:0); }
+            for(let i = 0; i < n; i++) {
+                let x = stX + i * 40, y = cy + 140;
+                if (t > 200) { const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; x = uiX + p * (x - uiX); y = uiY + p * (cy + 140 - uiY); }
+                drawDragonBall(ctx, x, y, 20, stageWord[i], isS, !isS, isS?1.5:0);
+            }
         }
         
         if (t <= 0) { 
@@ -526,7 +539,7 @@ export default function App() {
     <div className="h-screen bg-blue-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-[400px] text-center">
             <h1 className="text-3xl font-black text-blue-900 mb-6">龍舟通行證</h1>
-            <input type="text" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="輸入名號" className="w-full border-2 border-blue-200 rounded-xl p-4 mb-6 text-center text-xl font-bold" />
+            <input type="text" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="輸入名號" className="w-full border-2 border-blue-200 rounded-xl p-4 mb-6 text-center text-xl font-bold text-gray-700" />
             <button onClick={() => handleLogin(inputName)} disabled={!inputName.trim()} className="w-full py-4 bg-blue-500 text-white text-xl font-bold rounded-xl shadow-md">確認登入</button>
         </div>
     </div>
@@ -538,15 +551,38 @@ export default function App() {
           <div className="flex flex-col"><span className="text-[10px] text-gray-500 font-bold leading-none">收集單字召喚神龍</span><span className="font-black text-green-700 leading-none">{currentWordObj.stages[currentStageIdx].word} ({currentWordObj.stages[currentStageIdx].meaning})</span></div>
           <div className="flex gap-1"> {currentWordObj.stages[currentStageIdx].word.split('').map((c, i) => <div key={i} className={`w-7 h-7 rounded-full flex items-center justify-center font-bold border-2 transition-all ${i < collectedLetters.length ? 'bg-orange-500 border-yellow-300 text-white scale-110' : 'bg-gray-200 text-gray-300'}`}>{c}</div>)} </div>
       </div>
-      <div className="flex-1 relative w-full max-w-[400px] bg-blue-200">
+      <div className="flex-1 relative w-full max-w-[400px] bg-blue-200 shadow-2xl">
           <canvas ref={canvasRef} width={400} height={600} className="w-full h-full block" />
           <div className="absolute top-4 left-4 flex flex-col"><span className="text-[10px] text-white/70 font-bold">召喚次數</span><span className="text-2xl font-black text-white drop-shadow-md">{summonCount}</span></div>
           <div className="absolute top-4 right-4 bg-yellow-500/80 px-3 py-1 rounded-full text-black font-black shadow-lg">💰 {coins}</div>
           {currentView === 'menu' && (
               <div className="absolute inset-0 bg-blue-900/90 flex flex-col items-center justify-center p-8 text-center animate-fadeIn z-20">
-                  <h1 className="text-4xl font-black text-white mb-8">端午龍舟長征</h1>
-                  <button onClick={startGame} className="w-full py-5 bg-green-500 hover:bg-green-400 text-white text-2xl font-black rounded-2xl shadow-2xl mb-4">▶ 開始長征</button>
-                  <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold rounded-2xl">🛠️ 龍舟改造廠</button>
+                  <h1 className="text-4xl font-black text-white mb-2">端午龍舟長征</h1>
+                  <p className="text-gray-400 mb-8 font-bold text-sm">歡迎船長：<span className="text-blue-400">{playerName}</span></p>
+                  <button onClick={startGame} className="w-full py-5 bg-green-500 hover:bg-green-400 text-white text-2xl font-black rounded-2xl shadow-2xl mb-4 transform transition hover:scale-105">▶ 開始長征</button>
+                  <button onClick={() => setCurrentView('shop')} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white text-xl font-bold rounded-2xl transform transition hover:scale-105">🛠️ 龍舟改造廠</button>
+                  <button onClick={() => setCurrentView('login')} className="text-white/40 underline mt-4 text-xs">切換帳號</button>
+              </div>
+          )}
+          {currentView === 'shop' && (
+              <div className="absolute inset-0 bg-gray-50 flex flex-col p-6 z-20 overflow-y-auto">
+                  <div className="flex justify-between items-center mb-6 border-b pb-4"><h2 className="text-2xl font-bold text-gray-800">🛠️ 改造廠</h2><div className="bg-yellow-100 px-4 py-1 rounded-full font-bold text-yellow-700">💰 {coins}</div></div>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4 text-center">
+                    <h3 className="font-bold text-red-600 mb-2">❤️ 船體強化 (Lv.{upgrades.lives})</h3>
+                    <div className="flex justify-center gap-4 mb-4">
+                        <BoatPreview level={upgrades.lives} isLocked={false} assets={assets} onClick={setGalleryLevel} />
+                        {upgrades.lives < 5 && <BoatPreview level={upgrades.lives + 1} isNext={true} isLocked={true} assets={assets} onClick={setGalleryLevel} />}
+                    </div>
+                    <button onClick={() => buyUpgrade('lives')} className="w-full py-2 bg-yellow-400 rounded-lg font-bold">升級: 💰 {UPGRADE_COSTS[upgrades.lives] || 'MAX'}</button>
+                  </div>
+                  <button onClick={() => setCurrentView('menu')} className="w-full py-3 bg-gray-600 text-white font-bold rounded-xl mt-auto">返回首頁</button>
+              </div>
+          )}
+          {galleryLevel && (
+              <div className="absolute inset-0 bg-black/95 z-30 flex flex-col items-center justify-center p-6" onClick={() => setGalleryLevel(null)}>
+                  <h2 className="text-white text-2xl font-black mb-8">Lv.{galleryLevel} 龍舟圖鑑</h2>
+                  <LargeBoatPreview level={galleryLevel} assets={assets} viewType="side" isLocked={galleryLevel > upgrades.lives} />
+                  <p className="text-gray-500 mt-4">點擊任意處關閉</p>
               </div>
           )}
       </div>
