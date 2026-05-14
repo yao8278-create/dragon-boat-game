@@ -635,20 +635,48 @@ export default function App() {
         }
     }
 
+    // 🌟 1. 繪製最底層：河水與河岸
     ctx.fillStyle = isFeverTime ? '#fffbe6' : stageConfig.water; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
     ctx.fillStyle = isFeverTime ? '#ffe58f' : stageConfig.bank; ctx.fillRect(0, 0, 20, state.canvasHeight); ctx.fillRect(state.canvasWidth - 20, 0, 20, state.canvasHeight); ctx.strokeStyle = isFeverTime ? '#ffd666' : stageConfig.line; ctx.lineWidth = 2;
     for(let i=0; i<6; i++) { const speedOffset = (state.introTimer > 0 || isAnimationPaused) ? 0 : (state.frames * state.speed); const yPos = (speedOffset + i * 120) % state.canvasHeight; ctx.beginPath(); ctx.moveTo(30, yPos); ctx.lineTo(30, yPos + 40); ctx.moveTo(state.canvasWidth - 30, yPos + 60); ctx.lineTo(state.canvasWidth - 30, yPos + 100); ctx.stroke(); }
     
+    // 🌟 2. 繪製危險層 (黑夜遮罩之下)：一般障礙物
+    for (let i = state.obstacles.length - 1; i >= 0; i--) {
+        const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed * dtFactor; obs.x += (obs.dx || 0) * dtFactor; obs.obsFrames = (obs.obsFrames || 0) + dtFactor; if (obs.type === 'ghost_ship') { obs.y += 1.5 * dtFactor; obs.x += Math.sin(obs.obsFrames * 0.1) * 2 * dtFactor; } else if (obs.type === 'fish') obs.y += 1.0 * dtFactor; }
+        
+        // 幽靈船例外：移到最上層發光層，這裡不畫
+        if (obs.type === 'ghost_ship') continue;
+
+        const customAsset = getTargetAsset(assets, obs.type);
+        if (customAsset && obs.type !== 'log' && obs.type !== 'rock') { if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2); ctx.rotate(obs.obsFrames * 0.06); ctx.drawImage(customAsset, -obs.width/2 - 10, -obs.height/2 - 10, obs.width + 20, obs.height + 20); ctx.restore(); } else ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } else {
+            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (Math.floor(obs.obsFrames)%10), 0, Math.PI*2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI*2); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
+        }
+        if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
+        if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
+    }
+
+    // 🌟 3. 繪製光影層：全螢幕黑夜遮罩 + 探照燈光暈
+    if (state.currentStage === 3 && !isFeverTime && !isAnimationPaused) {
+        // 放寬探照燈光暈範圍，給予足夠的反應時間
+        const gradient = ctx.createRadialGradient(state.player.x + state.player.width/2, state.player.y + state.player.height/2, 60, state.player.x + state.player.width/2, state.player.y + state.player.height/2, 280); 
+        gradient.addColorStop(0, 'rgba(0,0,0,0)'); 
+        gradient.addColorStop(0.6, 'rgba(0,0,0,0.4)'); // 讓中間過渡層更寬、更透亮
+        gradient.addColorStop(1, 'rgba(0,0,0,0.95)'); // 外圍極深
+        ctx.fillStyle = gradient; 
+        ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
+    }
+
+    // 🌟 4. 繪製發光層 (黑夜遮罩之上)：龍舟、金幣、字母、幽靈船、特效
     const currentLvl = parseInt(upgrades?.lives, 10) || 1; const boatScale = getBoatScale(currentLvl);
     
-    // 🌟 史詩展示：放慢穿越速度與放大 200%
+    // 繪製龍舟 (開場或遊玩中)
     if (state.introTimer > 0) {
         const prevIntro = state.introTimer;
         state.introTimer = Math.max(0, state.introTimer - dtFactor);
-        const progress = 1 - (state.introTimer / 240); // 總幀數 240
-        if (progress < 0.7) { // 側邊展示時間加長 (0.7)
+        const progress = 1 - (state.introTimer / 240); 
+        if (progress < 0.7) { 
             const sideImg = getTargetAsset(assets, `boat${currentLvl}_side`); const xPos = -200 + (progress / 0.7) * (state.canvasWidth + 400); const yPos = state.canvasHeight / 2; ctx.save(); ctx.translate(xPos, yPos);
-            ctx.scale(2, 2); // 🌟 放大 200%
+            ctx.scale(2, 2); 
             if (sideImg) { const baseW = 140, baseH = 80; if (currentLvl === 4 || currentLvl === 5) ctx.scale(-1, 1); ctx.drawImage(sideImg, -(baseW * boatScale)/2, -(baseH * boatScale)/2, baseW * boatScale, baseH * boatScale); } else { ctx.fillStyle = '#cf1322'; ctx.fillRect(-50 * boatScale, -15 * boatScale, 100 * boatScale, 30 * boatScale); }
             ctx.restore(); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.shadowBlur = 10; ctx.shadowColor = '#096dd9'; ctx.fillText(`Lv.${currentLvl} 龍舟出發！`, state.canvasWidth/2, state.canvasHeight/2 - 80); ctx.shadowBlur = 0;
         } else {
@@ -667,10 +695,6 @@ export default function App() {
         if (boatImg) { ctx.save(); ctx.translate(state.player.x + state.player.width/2, state.player.y + state.player.height/2); if (currentLvl === 4 || currentLvl === 5) ctx.scale(-1, 1); const baseS = 90; ctx.drawImage(boatImg, -(baseS * boatScale)/2, -(baseS * boatScale)/2, baseS * boatScale, baseS * boatScale); ctx.restore(); } else drawGeometricBoat(ctx, state.player.x, state.player.y, state.player.width, state.player.height, currentLvl);
     }
     
-    if (state.currentStage === 3 && !isFeverTime && !isAnimationPaused) {
-        const gradient = ctx.createRadialGradient(state.player.x + 20, state.player.y + 40, 50, state.player.x + 20, state.player.y + 40, 250); gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(1, 'rgba(0,0,0,0.85)'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, state.canvasWidth, state.canvasHeight);
-    }
-    
     if (isFeverTime) {
         if (!isAnimationPaused) {
             const prevFever = state.feverTimer;
@@ -681,22 +705,27 @@ export default function App() {
         if (assets?.dragon) { ctx.shadowBlur = 30; ctx.shadowColor = '#faad14'; ctx.drawImage(assets.dragon, -60, -60, 120, 120); } ctx.restore();
     } 
 
+    // 繪製自發光寶物 (金幣、字母)
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i]; if (!isAnimationPaused) { item.x += (item.dx || 0) * dtFactor; item.y += (item.dy || state.speed) * dtFactor; if (item.dx !== 0 && (item.x < 20 || item.x > state.canvasWidth - 50)) item.dx *= -1; }
         
         if (item.type === 'coin') { 
-            const coinImg = getTargetAsset(assets, 'coin'); if (coinImg) { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x - 5, item.y - 5, 40, 40); ctx.restore(); } else { ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 14, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); } 
+            const coinImg = getTargetAsset(assets, 'coin'); if (coinImg) { ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = '#ffe58f'; ctx.drawImage(coinImg, item.x - 5, item.y - 5, 40, 40); ctx.restore(); } else { ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = '#ffe58f'; ctx.beginPath(); ctx.arc(item.x + 15, item.y + 15, 14, 0, Math.PI * 2); ctx.fillStyle = '#fadb14'; ctx.fill(); ctx.strokeStyle = '#d48806'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); } 
         } else {
             const cx = item.x + item.width / 2;
             const hoverY = Math.sin(state.frames * 0.15) * 5; 
             const ball_y = item.y - 45 + hoverY; 
             const zongzi_y = item.y + item.height / 2; 
 
+            // 在黑夜中加強龍珠與粽子的自發光
+            ctx.save();
+            if (state.currentStage === 3) { ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(250, 173, 20, 0.8)'; }
             ctx.beginPath(); ctx.moveTo(cx, ball_y); ctx.lineTo(cx, zongzi_y); ctx.strokeStyle = 'rgba(212, 177, 6, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.setLineDash([]); 
 
-            const zongziImg = getTargetAsset(assets, 'zongzi'); if (zongziImg) { ctx.save(); ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.drawImage(zongziImg, item.x, item.y, item.width, item.height); ctx.restore(); } else { ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(cx, item.y); ctx.lineTo(item.x+item.width, item.y+item.height); ctx.lineTo(item.x, item.y+item.height); ctx.fill(); }
+            const zongziImg = getTargetAsset(assets, 'zongzi'); if (zongziImg) { ctx.drawImage(zongziImg, item.x, item.y, item.width, item.height); } else { ctx.fillStyle = '#389e0d'; ctx.beginPath(); ctx.moveTo(cx, item.y); ctx.lineTo(item.x+item.width, item.y+item.height); ctx.lineTo(item.x, item.y+item.height); ctx.fill(); }
+            ctx.restore();
             
-            drawDragonBall(ctx, cx, ball_y, 22, item.char, true, false); 
+            drawDragonBall(ctx, cx, ball_y, 22, item.char, true, false, state.currentStage === 3 ? 1.5 : 0); // 黑夜中額外加強光暈
         }
 
         if (!isAnimationPaused && checkCollision(state.player, item)) {
@@ -711,22 +740,27 @@ export default function App() {
         if (item.y - 60 > state.canvasHeight) state.items.splice(i, 1);
     }
 
-    for (let i = state.obstacles.length - 1; i >= 0; i--) {
-        const obs = state.obstacles[i]; if (!isAnimationPaused) { obs.y += state.speed * dtFactor; obs.x += (obs.dx || 0) * dtFactor; obs.obsFrames = (obs.obsFrames || 0) + dtFactor; if (obs.type === 'ghost_ship') { obs.y += 1.5 * dtFactor; obs.x += Math.sin(obs.obsFrames * 0.1) * 2 * dtFactor; } else if (obs.type === 'fish') obs.y += 1.0 * dtFactor; }
-        const customAsset = getTargetAsset(assets, obs.type);
-        if (customAsset && obs.type !== 'log' && obs.type !== 'rock') { if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x + obs.width/2, obs.y + obs.height/2); ctx.rotate(obs.obsFrames * 0.06); ctx.drawImage(customAsset, -obs.width/2 - 10, -obs.height/2 - 10, obs.width + 20, obs.height + 20); ctx.restore(); } else ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } else {
-            if (obs.type === 'whirlpool') { ctx.save(); ctx.translate(obs.x+25, obs.y+25); ctx.rotate(obs.obsFrames * 0.1); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0,0, 10 + (Math.floor(obs.obsFrames)%10), 0, Math.PI*2); ctx.stroke(); ctx.restore(); } else if (obs.type === 'fish') { ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.ellipse(obs.x+22, obs.y+22, 20, 10, obs.dx > 0 ? 0 : Math.PI, 0, Math.PI*2); ctx.fill(); } else if (obs.type === 'ghost_ship') { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); } else if (obs.type === 'log') { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(obs.x, obs.y, obs.width, obs.height, 10) : ctx.fillRect(obs.x, obs.y, obs.width, obs.height); ctx.fill(); } else { ctx.fillStyle = obs.color; ctx.beginPath(); ctx.moveTo(obs.x+10, obs.y); ctx.lineTo(obs.x+obs.width-10, obs.y); ctx.lineTo(obs.x+obs.width, obs.y+20); ctx.lineTo(obs.x+obs.width-5, obs.y+obs.height); ctx.lineTo(obs.x+5, obs.y+obs.height); ctx.lineTo(obs.x, obs.y+20); ctx.closePath(); ctx.fill(); }
+    // 繪製自發光障礙物 (僅限幽靈船)
+    for (let i = 0; i < state.obstacles.length; i++) {
+        const obs = state.obstacles[i];
+        if (obs.type === 'ghost_ship') {
+            const customAsset = getTargetAsset(assets, obs.type);
+            ctx.save();
+            ctx.shadowBlur = 15; ctx.shadowColor = 'rgba(0, 255, 255, 0.8)'; // 幽靈船自帶幽藍發光
+            if (customAsset) { ctx.drawImage(customAsset, obs.x - 10, obs.y - 10, obs.width + 20, obs.height + 20); } 
+            else { ctx.fillStyle = 'rgba(0, 255, 255, 0.6)'; ctx.beginPath(); ctx.moveTo(obs.x+22, obs.y); ctx.lineTo(obs.x+45, obs.y+20); ctx.lineTo(obs.x+22, obs.y+45); ctx.lineTo(obs.x, obs.y+20); ctx.fill(); }
+            ctx.restore();
         }
-        if (!isAnimationPaused && !state.player.isInvincible && !isFeverTime && checkCollision(state.player, obs)) { audio.sfxHit(); setLives(l => { const nL = l - 1; if (nL <= 0) endGame(); return nL; }); state.player.isInvincible = true; state.player.invincibleTimer = 90; state.obstacles.splice(i, 1); continue; }
-        if (obs.y > state.canvasHeight) state.obstacles.splice(i, 1);
     }
 
+    // 繪製特效
     for (let i = state.effects.length - 1; i >= 0; i--) {
         const eff = state.effects[i]; const progress = eff.frames / eff.maxFrames; const alpha = 1 - progress; ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
         if (eff.type === 'coin_burst') { ctx.fillStyle = '#fadb14'; for (let j = 0; j < 5; j++) { const angle = (Math.PI * 2 / 5) * j + (eff.frames * 0.1); const dist = eff.frames * 2.5; ctx.fillRect(eff.x + Math.cos(angle) * dist - 3, eff.y + Math.sin(angle) * dist - 3, 6, 6); } } else if (eff.type === 'leaf_burst') { ctx.fillStyle = '#389e0d'; for (let j = 0; j < 4; j++) { ctx.save(); const angle = (Math.PI * 2 / 4) * j; const dist = eff.frames * 1.5; ctx.translate(eff.x + Math.cos(angle) * dist, eff.y + Math.sin(angle) * dist + (eff.frames * 0.5)); ctx.rotate(eff.frames * 0.1); ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.fill(); ctx.restore(); } } else if (eff.type === 'letter_ascend') { const flyY = eff.y - (eff.frames * 4); ctx.globalAlpha = Math.max(0, alpha); drawDragonBall(ctx, eff.x, flyY, 15, eff.char, true, false); } else if (eff.type === 'letter_ascend_target') { const easeP = 1 - Math.pow(1 - progress, 3); const currentX = eff.startX + (eff.targetX - eff.startX) * easeP; const currentY = eff.startY + (eff.targetY - eff.startY) * easeP; const currentRadius = 15 - (easeP * 3); ctx.globalAlpha = Math.max(0, 1 - Math.pow(progress, 5)); drawDragonBall(ctx, currentX, currentY, currentRadius, eff.char, true, false); }
         ctx.restore(); eff.frames += dtFactor; if (eff.frames >= eff.maxFrames) state.effects.splice(i, 1);
     }
     
+    // UI 與 動畫層
     if (state.wordIntroTimer > 0) {
         const prevWordTimer = state.wordIntroTimer;
         state.wordIntroTimer = Math.max(0, state.wordIntroTimer - dtFactor); 
@@ -769,7 +803,6 @@ export default function App() {
             ctx.font = '900 24px sans-serif'; ctx.strokeText(`(${ritualMeaning})`, cx, textY + 40); ctx.fillStyle = '#b7eb8f'; ctx.fillText(`(${ritualMeaning})`, cx, textY + 40); ctx.restore();
         }
 
-        // 🌟 新增：組合字多排顯示邏輯
         const rows = [];
         if (!isGreat || currentWordObj.stages.length === 1) {
             rows.push({ chars: targetWord.split(''), isPrev: false });
@@ -780,18 +813,18 @@ export default function App() {
         }
         const numRows = rows.length;
         const rowSpacingY = 50; 
-        const beamBottomY = cy + ((numRows - 1) / 2) * rowSpacingY; // 光束延伸至最底下一排
+        const beamBottomY = cy + ((numRows - 1) / 2) * rowSpacingY; 
 
         if (t <= 140 && t > 0) {
             const beamP = Math.min(1, (140 - t) / 20), beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
-            const bw = isGreat ? (numRows > 1 ? 180 : 160) : 120; // 組合字光束稍寬
+            const bw = isGreat ? (numRows > 1 ? 180 : 160) : 120; 
             const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(250, 173, 20, 0)'); grad.addColorStop(0.5, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(250, 173, 20, 0)'); ctx.fillStyle = grad; 
-            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamBottomY); // 🌟 精準打到最下排龍珠
+            ctx.fillRect(cx - (bw/2) * beamP, 0, bw * beamP, beamBottomY); 
             ctx.restore();
         }
         
         const maxAllowedWidth = state.canvasWidth - 40; 
-        const idealDia = 46; // 稍微放大基準龍珠尺寸
+        const idealDia = 46; 
         
         for (let r = 0; r < numRows; r++) {
             const rowChars = rows[r].chars;
@@ -800,7 +833,7 @@ export default function App() {
             const activeDia = Math.min(idealDia, maxAllowedWidth / n); 
             const activeRadius = activeDia / 2;
             const startX = cx - ((n * activeDia) / 2) + activeRadius; 
-            const rowY = cy + (r - (numRows - 1) / 2) * rowSpacingY; // 每排的 Y 座標
+            const rowY = cy + (r - (numRows - 1) / 2) * rowSpacingY; 
 
             for (let i = 0; i < n; i++) {
                 const ui = isPrev ? null : {x: state.canvasWidth - 20 - (n - 1 - i) * 32 - 14, y: 30}; 
@@ -815,7 +848,6 @@ export default function App() {
                     if (t > 200) { const p = (260 - t) / 60; x = ui.x + p * (tx - ui.x); y = ui.y + p * (ty - ui.y); } 
                 }
                 
-                // 🌟 龍珠與光束同步消失
                 if (t <= 30) { alpha *= Math.max(0, t / 30); }
                 ctx.save(); ctx.globalAlpha = alpha; drawDragonBall(ctx, x, y, activeRadius, rowChars[i], true, false, ritualGlow); ctx.restore();
             }
