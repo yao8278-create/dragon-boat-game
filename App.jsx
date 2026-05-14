@@ -9,12 +9,12 @@ import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 // 如果你想在 Vercel 網站上跨手機/電腦同步紀錄，
 // 請去 Google Firebase 免費建立專案，並將憑證填入這裡：
 const myFirebaseConfig = {
-  apiKey: "填入你的apiKey",
-  authDomain: "填入你的authDomain",
-  projectId: "填入你的projectId",
-  storageBucket: "填入你的storageBucket",
-  messagingSenderId: "填入你的messagingSenderId",
-  appId: "填入你的appId"
+  apiKey: "AIzaSyCCZdo93p0cEPDC_ZRxZrlW_jscpdDv4LQ",
+  authDomain: "project-4337058023593134662.firebaseapp.com",
+  projectId: "project-4337058023593134662",
+  storageBucket: "project-4337058023593134662.firebasestorage.app",
+  messagingSenderId: "229355651540",
+  appId: "1:229355651540:web:f2184f7c37875132e55641"
 };
 
 // 🌟 初始化雲端環境
