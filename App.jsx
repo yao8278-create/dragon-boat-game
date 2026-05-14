@@ -3,10 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// 🌟 初始化雲端環境 (支援 Canvas 預覽與 Vercel 部署雙棲模式)
-let app, auth, db;
-let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
-// 如果您在 Vercel 上，請將 Firebase 的 Config 貼在這裡
+// 🌟 STREAMING_CHUNK:Configuring Firebase and Global Constants...
+// 如果您想在 Vercel 上跨設備同步進度，請將您的 Firebase Config 貼在這裡：
 const myFirebaseConfig = {
   apiKey: "AIzaSyDBGDINEB6yrmO9kn33rFfvCvwv6ToYkjc",
   authDomain: "project-4337058023593134662.firebaseapp.com",
@@ -16,10 +14,11 @@ const myFirebaseConfig = {
   appId: "1:229355651540:web:f2184f7c37875132e55641"
 };
 
+let app, auth, db;
+let appId = typeof __app_id !== 'undefined' ? __app_id : 'dragon-boat-custom';
 try {
     if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-        const firebaseConfig = JSON.parse(__firebase_config);
-        app = initializeApp(firebaseConfig);
+        app = initializeApp(JSON.parse(__firebase_config));
     } else {
         app = initializeApp(myFirebaseConfig);
     }
@@ -29,23 +28,14 @@ try {
     console.warn("Cloud config error, falling back to local storage.");
 }
 
-// 🌟 翻轉設定：船 4 和 5 朝左，需要水平翻轉。
 const FLIP_SIDE_BOATS = [4, 5];
 
-// ==========================================
-// 🎵 Web Audio API 即時合成音效引擎 (音量優化版)
-// ==========================================
+// 🌟 STREAMING_CHUNK:Initializing Audio Engine...
 class SynthEngine {
     constructor() {
-        this.ctx = null;
-        this.master = null;
-        this.mode = 'menu'; 
-        this.nextNoteTime = 0;
-        this.step = 0;
-        this.isMuted = true;
-        this.timerID = null;
+        this.ctx = null; this.master = null; this.mode = 'menu'; 
+        this.nextNoteTime = 0; this.step = 0; this.isMuted = true;
     }
-
     init() {
         if (this.ctx) return;
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -53,10 +43,8 @@ class SynthEngine {
         this.master = this.ctx.createGain();
         this.master.gain.value = 0.1; 
         this.master.connect(this.ctx.destination);
-        this.nextNoteTime = this.ctx.currentTime + 0.1;
         this.scheduler();
     }
-
     toggleMute() {
         if (!this.ctx) this.init();
         this.isMuted = !this.isMuted;
@@ -64,13 +52,10 @@ class SynthEngine {
         this.master.gain.value = this.isMuted ? 0 : 0.1;
         return this.isMuted;
     }
-
     setMode(mode) { this.mode = mode; }
-
     playTone(freq, type, duration, vol = 1) {
         if (this.isMuted || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
         osc.type = type; osc.frequency.value = freq;
         osc.connect(gain); gain.connect(this.master);
         osc.start(this.ctx.currentTime);
@@ -78,11 +63,9 @@ class SynthEngine {
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
         osc.stop(this.ctx.currentTime + duration);
     }
-
     playDrum(time, isHeavy = false) {
         if (this.isMuted || !this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
         osc.connect(gain); gain.connect(this.master);
         osc.frequency.setValueAtTime(isHeavy ? 120 : 180, time);
         osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.3);
@@ -90,38 +73,31 @@ class SynthEngine {
         gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
         osc.start(time); osc.stop(time + 0.3);
     }
-
     sfxCoin() { this.playTone(987.77, 'square', 0.1, 0.3); setTimeout(() => this.playTone(1318.51, 'square', 0.2, 0.3), 80); }
-    sfxLetter(progress) { const baseFreq = 440 + (progress * 200); this.playTone(baseFreq, 'sine', 0.1, 0.6); setTimeout(() => this.playTone(baseFreq * 1.25, 'sine', 0.2, 0.6), 100); }
+    sfxLetter(progress) { this.playTone(440 + (progress * 200), 'sine', 0.1, 0.6); }
     sfxHit() { this.playDrum(this.ctx ? this.ctx.currentTime : 0, true); this.playTone(50, 'sawtooth', 0.4, 0.8); }
-    
     sfxRoar() {
         if (this.isMuted || !this.ctx) return;
-        const dur = 3.5; const t = this.ctx.currentTime;
-        const baseFreq = 261.63;
+        const t = this.ctx.currentTime;
         [1, 1.25, 1.5, 2].forEach(interval => {
-            const f = baseFreq * interval;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(f, t);
-            osc.frequency.exponentialRampToValueAtTime(f * 2.5, t + dur);
-            gain.gain.setValueAtTime(0.15, t); gain.gain.exponentialRampToValueAtTime(0.01, t + dur);
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(261.63 * interval, t);
+            osc.frequency.exponentialRampToValueAtTime(261.63 * interval * 2.5, t + 3.5);
+            gain.gain.setValueAtTime(0.15, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 3.5);
             osc.connect(gain); gain.connect(this.master);
-            osc.start(t); osc.stop(t + dur);
+            osc.start(t); osc.stop(t + 3.5);
         });
     }
-
     scheduler() {
         if (!this.ctx) return;
         while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
             this.playStep(this.nextNoteTime);
             const tempo = this.mode === 'fever' ? 180 : (this.mode === 'game' ? 140 : 160);
-            this.nextNoteTime += (60.0 / tempo) / 2; 
+            this.nextNoteTime += (60.0 / tempo) / 2;
             this.step = (this.step + 1) % 32; 
         }
-        this.timerID = setTimeout(() => this.scheduler(), 25);
+        setTimeout(() => this.scheduler(), 25);
     }
-
     playStep(time) {
         if (this.isMuted || this.mode === 'stopped') return;
         if (this.step % 8 === 0) this.playDrum(time, true);
@@ -129,12 +105,12 @@ class SynthEngine {
 }
 const audio = new SynthEngine();
 
+// 🌟 STREAMING_CHUNK:Defining Game Config and Logic Helpers...
 const speakWord = (word) => {
     if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); 
-        const utterance = new SpeechSynthesisUtterance(word.toLowerCase());
-        utterance.lang = 'en-US'; utterance.rate = 0.65;
-        window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.cancel();
+        const ut = new SpeechSynthesisUtterance(word.toLowerCase());
+        ut.lang = 'en-US'; ut.rate = 0.65; window.speechSynthesis.speak(ut);
     }
 };
 
@@ -147,9 +123,9 @@ const STAGE_CONFIG = {
 const WORD_LIST = [
   { fullWord: 'ZONGZI', fullMeaning: '粽子', stages: [{ word: 'ZONGZI', meaning: '粽子' }] },
   { fullWord: 'DRAGON BOAT', fullMeaning: '龍舟', stages: [{ word: 'DRAGON', meaning: '龍' }, { word: 'BOAT', meaning: '船' }] },
-  { fullWord: 'SACHET', fullMeaning: '香包', stages: [{ word: 'SACHET', meaning: '香包' }] },
   { fullWord: 'RICE DUMPLING', fullMeaning: '粽子', stages: [{ word: 'RICE', meaning: '米' }, { word: 'DUMPLING', meaning: '糰子' }] },
   { fullWord: 'STICKY RICE', fullMeaning: '糯米', stages: [{ word: 'STICKY', meaning: '黏的' }, { word: 'RICE', meaning: '米' }] },
+  { fullWord: 'DRUM', fullMeaning: '鼓', stages: [{ word: 'DRUM', meaning: '鼓' }] },
   { fullWord: 'BAMBOO', fullMeaning: '竹子', stages: [{ word: 'BAMBOO', meaning: '竹子' }] }
 ];
 
@@ -179,6 +155,7 @@ const safeSetStorage = (key, val, isJson = false) => {
     try { window.localStorage.setItem(key, isJson ? JSON.stringify(val) : val.toString()); } catch (e) {}
 };
 
+// 🌟 STREAMING_CHUNK:Defining Component Functions...
 const drawDragonBall = (ctx, x, y, radius, char, isGlowing, isStone = false, extraGlow = 0) => {
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
     if (isStone) {
@@ -191,7 +168,7 @@ const drawDragonBall = (ctx, x, y, radius, char, isGlowing, isStone = false, ext
     }
     ctx.fillStyle = isStone ? '#434343' : '#820014';
     ctx.font = `900 ${radius * 1.1}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(char, x, y); ctx.restore();
+    ctx.fillText(char, x, y + radius*0.05); ctx.restore();
 };
 
 const drawGeometricBoat = (ctx, x, y, width, height, level) => {
@@ -207,7 +184,7 @@ const BoatPreview = ({ level, isNext, assets, onClick, isLocked }) => {
         const canvas = previewCanvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#bae0ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const boatImg = getTargetAsset(assets, `boat${level}_side`);
+        const boatImg = getTargetAsset(assets, `boat${Math.min(level, 5)}_side`);
         const targetScale = getBoatScale(level); 
         ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2);
         if (boatImg) { 
@@ -237,7 +214,7 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
         const canvas = canvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = isLocked ? '#262626' : '#bae0ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const boatImg = getTargetAsset(assets, `boat${level}_${viewType}`);
+        const boatImg = getTargetAsset(assets, `boat${Math.min(level, 5)}_${viewType}`);
         const targetScale = getBoatScale(level) * 1.5;
         ctx.save(); ctx.translate(canvas.width/2, canvas.height/2);
         if (boatImg) {
@@ -257,6 +234,7 @@ const LargeBoatPreview = ({ level, assets, viewType, isLocked }) => {
     return <canvas ref={canvasRef} width={300} height={200} className="rounded-xl border-4 border-white shadow-2xl block mb-4" />;
 };
 
+// 🌟 STREAMING_CHUNK:Initializing App State...
 export default function App() {
   const canvasRef = useRef(null);
   const [currentView, setCurrentView] = useState('loading');
@@ -362,6 +340,7 @@ export default function App() {
   const requestRef = useRef();
   const getNextWord = useCallback(() => { if (wordBagRef.current.length === 0) wordBagRef.current = [...WORD_LIST].sort(() => Math.random() - 0.5); return wordBagRef.current.pop(); }, []);
 
+  // 🌟 STREAMING_CHUNK:Loading Game Assets...
   useEffect(() => {
       const initAssets = async () => {
           let loadedAssets = {};
@@ -388,10 +367,9 @@ export default function App() {
 
   const endGame = useCallback(() => { setIsPlaying(false); setGameOver(true); setCoins(c => c + gameState.current.sessionCoinsRef); audio.setMode('menu'); if (gameState.current.completedWordsCount > maxSummons) { setIsNewRecord(true); setMaxSummons(gameState.current.completedWordsCount); } }, [maxSummons]);
 
+  // 🌟 STREAMING_CHUNK:Main Game Loop Logic...
   const gameLoop = useCallback((currentTime) => {
     if (!isPlaying || gameOver) return;
-    
-    // 🌟 物理同步：Delta Time 計算
     const dt = (currentTime - lastTimeRef.current) / (1000 / 60);
     lastTimeRef.current = currentTime;
     const sDt = Math.min(dt, 3); 
@@ -440,6 +418,7 @@ export default function App() {
         if (s.feverTimer <= 0) { setIsFeverTime(false); s.speed = s.baseSpeed; s.wordIntroTimer = 150; }
     }
 
+    // 🌟 STREAMING_CHUNK:Rendering Items and Objects...
     if (!isAnimationPaused && s.frames % Math.floor(70/sDt || 70) === 0) {
         const char = stageWord[collectedLetters.length];
         s.items.push({ x: Math.random()*300+50, y: -80, char, type: isFeverTime ? 'coin' : 'letter' });
@@ -456,7 +435,7 @@ export default function App() {
             ctx.save(); ctx.beginPath(); ctx.moveTo(item.x, item.y - 35 + hY); ctx.lineTo(item.x, item.y + 5);
             ctx.strokeStyle = '#d48806'; ctx.setLineDash([4, 2]); ctx.stroke(); ctx.restore();
             if (assets.zongzi) ctx.drawImage(assets.zongzi, item.x-20, item.y-20, 40, 40);
-            drawDragonBall(ctx, item.x, item.y - 35 + hY, 22, item.char, true);
+            drawDragonBall(ctx, item.x, item.y - 35 + hY, 22, item.char, false, true);
         }
         
         if (!isAnimationPaused && checkCollision(s.player, { x: item.x-20, y: item.y-20, width: 40, height: 40 })) {
@@ -473,18 +452,18 @@ export default function App() {
         if (item.y > 650) s.items.splice(i, 1);
     }
 
+    // 🌟 STREAMING_CHUNK:Handling Summoning Animation...
     if (s.summonTimer > 0) {
         s.summonTimer -= sDt; const t = s.summonTimer; ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,400,600);
         const cx = 200, cy = s.player.y - 120;
         const isSingleRow = !s.isGreatSummon || currentWordObj.stages.length === 1;
 
-        // --- 1. 光柱 (移到龍珠後方) ---
+        // --- 1. 光柱 (置於龍珠後方) ---
         if (t <= 140 && t > 0) {
             const beamAlpha = Math.min(1, t / 30); ctx.save(); ctx.globalAlpha = beamAlpha;
             const bw = s.isGreatSummon ? 160 : 120;
             const grad = ctx.createLinearGradient(cx - bw/2, 0, cx + bw/2, 0); grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(0.5, 'white'); grad.addColorStop(1, 'rgba(255,255,255,0)');
             ctx.fillStyle = grad;
-            // 🌟 修正高度：精確停在龍珠中心座標 (cy + 120 或 cy + 140)
             const beamEnd = isSingleRow ? cy + 120 : cy + 140;
             ctx.fillRect(cx - (bw / 2) * Math.min(1, (140 - t) / 20), 0, bw * Math.min(1, (140 - t) / 20), beamEnd); 
             ctx.restore();
@@ -499,25 +478,28 @@ export default function App() {
             if (assets.dragon) { ctx.save(); ctx.translate(cx, dY); ctx.scale(scale, scale); ctx.drawImage(assets.dragon, -75, -75, 150, 150); ctx.restore(); }
         }
 
-        // --- 3. 龍珠 (直線排列，無縫貼合) ---
+        // --- 3. 龍珠排列 (無縫直線) ---
         const bR = 20; const isS = t <= 200;
         const n = stageWord.length; const stX = cx - (n * 40) / 2 + 20;
         if (isSingleRow) {
             for (let i = 0; i < n; i++) {
                 let x = stX + i * 40, y = cy + 120;
                 if (t > 200) { const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; x = uiX + p * (x - uiX); y = uiY + p * (cy + 120 - uiY); }
-                const glow = (t <= 200 && t > 140) ? Math.pow(1-((t-140)/60), 4)*30 : (t <= 140 ? 1.5 : 0);
+                let glow = 0; if (isS) { if (t > 140) glow = Math.pow(1-((t-140)/60), 4)*30; else glow = Math.abs(Math.sin(s.frames*0.2))*1.2; }
                 drawDragonBall(ctx, x, y, bR, stageWord[i], isS, !isS, glow);
             }
         } else {
-            // 雙排邏輯略過細節處理，與單排邏輯相同修正高度
-            let prevWord = ""; for (let ss = 0; s < currentStageIdx; ss++) prevWord += currentWordObj.stages[ss].word;
+            let prevWord = ""; for (let ss = 0; ss < currentStageIdx; ss++) prevWord += currentWordObj.stages[ss].word;
             const n1 = prevWord.length; const stX1 = cx - (n1 * 40) / 2 + 20;
-            for(let i = 0; i < n1; i++) { drawDragonBall(ctx, stX1 + i * 40, cy + 90, 20, prevWord[i], isS, false, isS?1.5:0); }
+            for(let i = 0; i < n1; i++) { 
+                let glow = isS ? Math.abs(Math.sin(s.frames*0.2))*1.2 : 0;
+                drawDragonBall(ctx, stX1 + i * 40, cy + 90, 20, prevWord[i], isS, false, glow); 
+            }
             for(let i = 0; i < n; i++) {
                 let x = stX + i * 40, y = cy + 140;
                 if (t > 200) { const p = (260 - t) / 60; const uiX = 400 - 20 - (n - 1 - i) * 32 - 14, uiY = 30; x = uiX + p * (x - uiX); y = uiY + p * (cy + 140 - uiY); }
-                drawDragonBall(ctx, x, y, 20, stageWord[i], isS, !isS, isS?1.5:0);
+                let glow = isS ? Math.abs(Math.sin(s.frames*0.2))*1.2 : 0;
+                drawDragonBall(ctx, x, y, 20, stageWord[i], isS, !isS, glow);
             }
         }
         
@@ -533,6 +515,7 @@ export default function App() {
 
   useEffect(() => { if (isPlaying) requestRef.current = requestAnimationFrame(gameLoop); return () => cancelAnimationFrame(requestRef.current); }, [isPlaying, gameLoop]);
 
+  // 🌟 STREAMING_CHUNK:Rendering User Interface...
   if (currentView === 'loading') return <div className="h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-6 text-center"><h1 className="text-3xl font-black mb-4 text-blue-300">極速載入中...</h1><div className="w-64 h-2 bg-gray-800 rounded overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{width:`${loadingProgress}%`}}></div></div><p className="mt-2 text-blue-400 font-bold">{loadingStatus}</p></div>;
 
   if (currentView === 'login') return (
